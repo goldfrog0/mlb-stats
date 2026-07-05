@@ -54,7 +54,8 @@ def main() -> None:
                     print("-" * len(name))
                     print(format_stat_table(df, args.stat))
 
-            plot_stat_comparison(df1, name1, df2, name2, args.season, args.window, args.stat)
+            plot_stat_comparison(df1, name1, df2, name2, args.season, args.window, args.stat,
+                                  save_path=args.save)
         else:
             df, full_name = _load_stat_dataframe(args.player, args.season, args.stat, args.window)
 
@@ -63,12 +64,7 @@ def main() -> None:
                 print("-" * len(full_name))
                 print(format_stat_table(df, args.stat))
 
-            plot_stat(df, full_name, args.season, args.window, args.stat)
-
-        if args.save:
-            import matplotlib.pyplot as plt
-            plt.savefig(args.save, dpi=150, bbox_inches="tight")
-            print(f"Saved to {args.save}")
+            plot_stat(df, full_name, args.season, args.window, args.stat, save_path=args.save)
 
     except ValueError as e:
         print(f"Error: {e}")

@@ -95,7 +95,25 @@ def format_stat_table(df: pd.DataFrame, stat_key: str) -> str:
     return table.to_string(index=False)
 
 
-def plot_stat(df: pd.DataFrame, player_name: str, season: int, window: int, stat_key: str) -> None:
+def _finish_plot(save_path: str | None) -> None:
+    """Save the current figure if a path was given, otherwise display it.
+    Saving must happen before plt.show(), since plt.show() blocks until
+    the window is closed and can tear down the figure afterward."""
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved to {save_path}")
+    else:
+        plt.show()
+
+
+def plot_stat(
+    df: pd.DataFrame,
+    player_name: str,
+    season: int,
+    window: int,
+    stat_key: str,
+    save_path: str | None = None,
+) -> None:
     """Render the stat plot."""
     config = get_stat_config(stat_key)
     label = config["label"]
@@ -115,7 +133,7 @@ def plot_stat(df: pd.DataFrame, player_name: str, season: int, window: int, stat
     plt.legend()
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.show()
+    _finish_plot(save_path)
 
 
 def plot_stat_comparison(
@@ -126,6 +144,7 @@ def plot_stat_comparison(
     season: int,
     window: int,
     stat_key: str,
+    save_path: str | None = None,
 ) -> None:
     """Render a two-player comparison plot, overlaying each player's rolling
     stat (the cumulative lines are dropped here since four lines together
@@ -142,4 +161,4 @@ def plot_stat_comparison(
     plt.legend()
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.show()
+    _finish_plot(save_path)
