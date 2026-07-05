@@ -67,8 +67,55 @@ on one chart instead of plotting a single player:
 
 Both players must have data for the same --stat (and therefore the
 same stat group) and --season, or you'll get a "No ... data found"
-error for whichever one doesn't. The comparison chart shows only the
-rolling lines (no cumulative lines) to keep it readable.
+error for whichever one doesn't. By default the comparison chart
+shows only the rolling lines (no cumulative lines) to keep it
+readable — see "COMPARISON DISPLAY OPTIONS" below to change this.
+
+
+COMPARISON DISPLAY OPTIONS
+----------------------------
+
+These only apply when a second player is given.
+
+--layout {overlay,stacked,side-by-side}
+     How to arrange the two players. Default: overlay.
+
+       overlay       Both players on one shared axes (the default —
+                      matches the original comparison view).
+       stacked       One axes per player, stacked vertically. Each
+                      player gets their own y-scale, so this is best
+                      for seeing each player's own hot/cold streaks
+                      clearly, at the cost of not being directly
+                      scale-comparable.
+       side-by-side  One axes per player, side by side, sharing a
+                      y-axis — best for directly comparing scale.
+
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --layout stacked
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --layout side-by-side
+
+--show-cumulative
+     Also draw each player's season-cumulative line (dashed, lower
+     alpha) alongside their rolling line. The cumulative line hides
+     the same early-season warm-up period the rolling line already
+     omits (fewer than --window games played), since a rate stat from
+     a handful of games can be extremely noisy and would otherwise
+     dwarf the rest of the season on the shared axis.
+
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --show-cumulative
+
+--diff
+     Add a panel below the main chart showing player 1's rolling
+     value minus player 2's, shaded by whoever is ahead at each point.
+     Since the two players are rarely on the same game schedule, this
+     reindexes both onto the union of both players' game dates and
+     forward-fills each player's rolling value between their games.
+
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --diff
+
+All three combine freely:
+
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era \
+           --layout stacked --show-cumulative --diff
 
 
 OPTIONS
@@ -119,6 +166,7 @@ COMBINING OPTIONS
      mlb-stats "Shohei Ohtani" --stat whip --season 2025 --window 3 --save ohtani_whip.png
      mlb-stats "Shohei Ohtani" "Freddie Freeman" --stat avg --window 10
      mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --table --save compare.png
+     mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --layout side-by-side --show-cumulative --diff
 
 
 TROUBLESHOOTING
@@ -159,6 +207,8 @@ mlb_stats/api.py      API calls: find_player(), get_game_log()
 mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       add_rolling_stat(), format_stat_table(),
                       plot_stat(), plot_stat_comparison()
+                      (COMPARISON_LAYOUTS lists the valid --layout
+                      values for comparison mode)
 mlb_stats/cli.py      Argument parsing / entry point (main())
 
 Data source: MLB Stats API (https://statsapi.mlb.com) — public,
