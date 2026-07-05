@@ -1,0 +1,178 @@
+MLB Stats CLI — How to Use
+===========================
+
+A local command-line tool that looks up an MLB player, pulls their
+game-by-game stat log for a season, and plots a chosen stat over time
+with a rolling average — for one player, or two players compared
+side by side.
+
+
+SETUP
+-----
+
+1. From the project root, activate the virtual environment:
+
+     cd /home/ziz/development/PythonBaseball
+     source venv/bin/activate
+
+2. If you haven't installed the package yet (or made changes to the
+   source files and need it re-linked), run:
+
+     pip install -e .
+
+   The -e flag installs it in "editable" mode, so any edits to the
+   files in mlb_stats/ take effect immediately without reinstalling.
+
+
+BASIC USAGE
+-----------
+
+     mlb-stats "Shohei Ohtani"
+
+This looks up the player by name, pulls their game log for the
+default stat (era) and default season (2026), and opens a chart
+window showing:
+  - the season's cumulative value of the stat (gray line)
+  - a rolling 5-game average (red line)
+
+
+SUPPORTED STATS (--stat)
+-------------------------
+
+Pitching:
+  era    Earned Run Average
+  whip   Walks + Hits per Inning Pitched
+  k9     Strikeouts per 9 innings
+  bb9    Walks per 9 innings
+
+Batting:
+  avg    Batting average
+  obp    On-base percentage
+  slg    Slugging percentage
+
+     mlb-stats "Paul Skenes" --stat k9
+     mlb-stats "Freddie Freeman" --stat obp
+
+The tool automatically requests the right stat group (pitching vs
+batting) from the API based on which --stat you pick.
+
+
+COMPARING TWO PLAYERS
+----------------------
+
+Pass a second player name to overlay both players' rolling averages
+on one chart instead of plotting a single player:
+
+     mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era
+
+Both players must have data for the same --stat (and therefore the
+same stat group) and --season, or you'll get a "No ... data found"
+error for whichever one doesn't. The comparison chart shows only the
+rolling lines (no cumulative lines) to keep it readable.
+
+
+OPTIONS
+-------
+
+--stat NAME
+     Which stat to plot. See "SUPPORTED STATS" above. Default: era.
+
+--season YEAR
+     Choose a different season.
+
+       mlb-stats "Clayton Kershaw" --season 2020
+
+--window N
+     Change the rolling average window (number of games averaged
+     together). Smaller windows show every hot/cold streak but look
+     noisy; larger windows smooth the trend but lag behind recent form.
+
+       mlb-stats "Shohei Ohtani" --window 3
+       mlb-stats "Shohei Ohtani" --window 8
+
+--save FILE
+     Save the chart to a PNG file instead of opening a display window.
+     Useful for headless machines or just keeping a permanent copy.
+     Works for both single-player and comparison charts.
+
+       mlb-stats "Clayton Kershaw" --save kershaw.png
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --save compare.png
+
+--table
+     Also print the per-game data behind the chart as a plain text
+     table (date, opponent, season-cumulative value, rolling value)
+     before opening/saving the chart. In comparison mode, prints one
+     table per player, each labeled with the player's name.
+
+       mlb-stats "Shohei Ohtani" --table
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --table
+
+     Rows before enough games have been played to fill the rolling
+     window show NaN in the rolling column — this matches the small
+     gap you'll see at the start of the rolling line on the chart.
+
+
+COMBINING OPTIONS
+-----------------
+
+     mlb-stats "Shohei Ohtani" --stat whip --season 2025 --window 3 --save ohtani_whip.png
+     mlb-stats "Shohei Ohtani" "Freddie Freeman" --stat avg --window 10
+     mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --table --save compare.png
+
+
+TROUBLESHOOTING
+----------------
+
+"No player found for '...'"
+     Check the spelling of the name. The lookup uses MLB's player
+     search API, so it needs to reasonably match a full name.
+
+"No {pitching,batting} data found for player ID ... in ..."
+     The player has no game log for that stat's group and season
+     (e.g. a position player for a pitching stat, or a season where
+     they were injured/didn't appear/hadn't debuted). Try a different
+     --stat or --season.
+
+"Multiple matches, using: ..."
+     Just a heads up — the name search found more than one player and
+     picked the first match. Use a more specific name if it picked
+     the wrong person.
+
+"FigureCanvasAgg is non-interactive, and thus cannot be shown"
+     Harmless if you used --save. If you want an actual display
+     window, make sure python3-tk is installed on your system
+     (sudo apt install python3-tk on Debian/Ubuntu) so matplotlib can
+     pick a GUI backend.
+
+
+PROJECT LAYOUT
+---------------
+
+mlb_stats/stats.py   Registry of supported stats (STAT_CONFIGS). Each
+                      entry declares its stat group, its season-
+                      cumulative field name, and the per-game fields
+                      to sum for a correct rolling calculation.
+                      Add a new stat here — nothing else needs to
+                      change to support it.
+mlb_stats/api.py      API calls: find_player(), get_game_log()
+mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
+                      add_rolling_stat(), format_stat_table(),
+                      plot_stat(), plot_stat_comparison()
+mlb_stats/cli.py      Argument parsing / entry point (main())
+
+Data source: MLB Stats API (https://statsapi.mlb.com) — public,
+unofficial, no API key required.
+
+
+WHAT'S NEXT
+-----------
+
+Possible future extensions:
+
+  - OPS (on-base + slugging combined) — doesn't fit the simple
+    numerator/denominator pattern in stats.py since it's a sum of two
+    rates, so it needs its own handling rather than a plain config
+    entry
+  - Team standings comparison across all 30 teams
+  - Team win % over a season (see the original notebook exploration
+    for the Dodgers schedule-based version of this)
