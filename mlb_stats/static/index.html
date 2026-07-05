@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MLB Stats</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+  <h1>MLB Player Stat Viewer</h1>
+
+  <form id="controls">
+    <div class="field">
+      <label for="player1">Player</label>
+      <input id="player1" type="text" placeholder="Shohei Ohtani" required>
+    </div>
+    <div class="field">
+      <label for="player2">Compare against (optional)</label>
+      <input id="player2" type="text" placeholder="Paul Skenes">
+    </div>
+    <div class="field">
+      <label for="stat">Stat</label>
+      <select id="stat"></select>
+    </div>
+    <div class="field">
+      <label for="season">Season</label>
+      <input id="season" type="number" value="2026">
+    </div>
+    <div class="field">
+      <label for="window">Rolling window</label>
+      <input id="window" type="number" value="5" min="1">
+    </div>
+    <div class="field checkbox">
+      <label><input id="showCumulative" type="checkbox"> Show cumulative line</label>
+    </div>
+    <div class="field checkbox">
+      <label><input id="showTable" type="checkbox"> Show data table</label>
+    </div>
+    <button type="submit">Plot</button>
+  </form>
+
+  <p id="error" class="error"></p>
+
+  <div id="chart"></div>
+  <div id="tableContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
