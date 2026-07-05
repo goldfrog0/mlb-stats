@@ -4,6 +4,7 @@ import pandas as pd
 
 from mlb_stats.api import find_player, get_game_log
 from mlb_stats.plots import (
+    COMPARISON_LAYOUTS,
     build_stat_dataframe,
     add_rolling_stat,
     format_stat_table,
@@ -40,6 +41,15 @@ def main() -> None:
                         help="Save plot to file instead of displaying e.g. ohtani.png")
     parser.add_argument("--table", action="store_true",
                         help="Also print the plotted data as a text table")
+    parser.add_argument("--layout", type=str, default="overlay", choices=COMPARISON_LAYOUTS,
+                        help="Comparison mode only: how to arrange the two players' charts "
+                             "(default: overlay)")
+    parser.add_argument("--show-cumulative", action="store_true",
+                        help="Comparison mode only: also draw each player's season-cumulative "
+                             "line (dashed)")
+    parser.add_argument("--diff", action="store_true",
+                        help="Comparison mode only: add a panel showing player 1's rolling "
+                             "value minus player 2's")
 
     args = parser.parse_args()
 
@@ -55,7 +65,8 @@ def main() -> None:
                     print(format_stat_table(df, args.stat))
 
             plot_stat_comparison(df1, name1, df2, name2, args.season, args.window, args.stat,
-                                  save_path=args.save)
+                                  save_path=args.save, show_cumulative=args.show_cumulative,
+                                  layout=args.layout, show_diff=args.diff)
         else:
             df, full_name = _load_stat_dataframe(args.player, args.season, args.stat, args.window)
 
