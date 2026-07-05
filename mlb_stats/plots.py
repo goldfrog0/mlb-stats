@@ -74,16 +74,23 @@ def add_rolling_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.DataFra
 
 
 def format_stat_table(df: pd.DataFrame, stat_key: str) -> str:
-    """Render the per-game data behind the plot (date, opponent, season-
-    cumulative value, rolling value) as a plain aligned text table."""
+    """Render the per-game data behind the plot (date, opponent, this
+    game's own value, season-cumulative value, rolling value) as a plain
+    aligned text table."""
+    config = get_stat_config(stat_key)
+    game_col = f"game_{stat_key}"
     season_col = f"season_{stat_key}"
     rolling_col = f"rolling_{stat_key}"
 
-    table = df[["date", "opponent", "cumulative", "rolling"]].copy()
+    game_numerator = sum(df[f] for f in config["numerator_fields"])
+    game_denominator = sum(df[f] for f in config["denominator_fields"])
+    game_value = (game_numerator / game_denominator) * config["multiplier"]
+
+    table = df[["date", "opponent"]].copy()
     table["date"] = table["date"].dt.strftime("%Y-%m-%d")
-    table = table.rename(columns={"cumulative": season_col, "rolling": rolling_col})
-    table[season_col] = table[season_col].round(3)
-    table[rolling_col] = table[rolling_col].round(3)
+    table[game_col] = game_value.round(3)
+    table[season_col] = df["cumulative"].round(3)
+    table[rolling_col] = df["rolling"].round(3)
 
     return table.to_string(index=False)
 

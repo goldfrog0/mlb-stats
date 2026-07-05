@@ -100,9 +100,10 @@ OPTIONS
 
 --table
      Also print the per-game data behind the chart as a plain text
-     table (date, opponent, season-cumulative value, rolling value)
-     before opening/saving the chart. In comparison mode, prints one
-     table per player, each labeled with the player's name.
+     table (date, opponent, that game's own value, season-cumulative
+     value, rolling value) before opening/saving the chart. In
+     comparison mode, prints one table per player, each labeled with
+     the player's name.
 
        mlb-stats "Shohei Ohtani" --table
        mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --table
