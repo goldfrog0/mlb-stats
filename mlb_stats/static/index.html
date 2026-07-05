@@ -36,6 +36,17 @@
     <div class="field checkbox">
       <label><input id="showTable" type="checkbox"> Show data table</label>
     </div>
+    <div class="field compare-only">
+      <label for="layout">Layout (comparison only)</label>
+      <select id="layout">
+        <option value="overlay" selected>Overlay</option>
+        <option value="stacked">Stacked</option>
+        <option value="side-by-side">Side by side</option>
+      </select>
+    </div>
+    <div class="field checkbox compare-only">
+      <label><input id="showDiff" type="checkbox"> Show diff panel (comparison only)</label>
+    </div>
     <button type="submit">Plot</button>
   </form>
 

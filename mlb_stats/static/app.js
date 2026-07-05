@@ -57,7 +57,9 @@ function buildSingleTraces(records, label, showCumulative) {
   return traces;
 }
 
-function buildComparisonTraces(records, name, color, showCumulative) {
+// Builds a player's rolling (+ optional cumulative) traces, routed to a
+// given subplot via axisIds ({xaxis, yaxis}, Plotly ids like "x"/"y2").
+function buildComparisonTraces(records, name, color, showCumulative, axisIds) {
   const traces = [
     {
       x: records.map((r) => r.date),
@@ -67,6 +69,8 @@ function buildComparisonTraces(records, name, color, showCumulative) {
       line: { color, width: 3 },
       text: records.map((r) => r.opponent),
       hovertemplate: "%{x}<br>%{text}<br>%{y:.3f}<extra>" + name + "</extra>",
+      xaxis: axisIds.xaxis,
+      yaxis: axisIds.yaxis,
     },
   ];
   if (showCumulative) {
@@ -78,9 +82,143 @@ function buildComparisonTraces(records, name, color, showCumulative) {
       line: { color, width: 1.5, dash: "dot" },
       opacity: 0.5,
       hovertemplate: "%{x}<br>%{y:.3f}<extra>" + name + " cumulative</extra>",
+      xaxis: axisIds.xaxis,
+      yaxis: axisIds.yaxis,
     });
   }
   return traces;
+}
+
+// Player1's rolling value minus player2's, reindexed onto the union of
+// both players' game dates with forward-fill (mirrors the CLI's
+// _reindexed_rolling_diff in plots.py).
+function computeDiff(records1, records2) {
+  const map1 = new Map(records1.map((r) => [r.date, r.rolling]));
+  const map2 = new Map(records2.map((r) => [r.date, r.rolling]));
+  const allDates = Array.from(new Set([...map1.keys(), ...map2.keys()])).sort();
+
+  let last1 = null;
+  let last2 = null;
+  const diff = [];
+  for (const d of allDates) {
+    if (map1.has(d) && map1.get(d) !== null) last1 = map1.get(d);
+    if (map2.has(d) && map2.get(d) !== null) last2 = map2.get(d);
+    diff.push(last1 !== null && last2 !== null ? last1 - last2 : null);
+  }
+  return { dates: allDates, diff };
+}
+
+// Diff panel as a black reference line plus two "fill to zero" traces
+// (one clipped to the positive side in color1, one to the negative side
+// in color2) -- mirrors the CLI's two fill_between calls plus its plot line.
+function buildDiffTraces(dates, diff, color1, color2, axisIds) {
+  const positive = diff.map((v) => (v === null ? null : Math.max(v, 0)));
+  const negative = diff.map((v) => (v === null ? null : Math.min(v, 0)));
+
+  return [
+    {
+      x: dates, y: positive, mode: "none", fill: "tozeroy",
+      fillcolor: withAlpha(color1, 0.3), showlegend: false, hoverinfo: "skip",
+      xaxis: axisIds.xaxis, yaxis: axisIds.yaxis,
+    },
+    {
+      x: dates, y: negative, mode: "none", fill: "tozeroy",
+      fillcolor: withAlpha(color2, 0.3), showlegend: false, hoverinfo: "skip",
+      xaxis: axisIds.xaxis, yaxis: axisIds.yaxis,
+    },
+    {
+      x: dates, y: diff, mode: "lines", line: { color: "black", width: 1 },
+      showlegend: false, hovertemplate: "%{x}<br>%{y:.3f}<extra>Diff</extra>",
+      xaxis: axisIds.xaxis, yaxis: axisIds.yaxis,
+    },
+  ];
+}
+
+function withAlpha(cssColor, alpha) {
+  const named = { crimson: "220,20,60", steelblue: "70,130,180" };
+  return `rgba(${named[cssColor] || "0,0,0"},${alpha})`;
+}
+
+// Computes subplot axis ids/domains for every (layout, showDiff) combo, plus
+// title annotations for the per-panel names shown in stacked/side-by-side.
+// Mirrors the exact gridspec layout in plots.py's plot_stat_comparison.
+function computeComparisonLayout(layoutMode, showDiff, name1, name2) {
+  const annotations = [];
+  let axes = {};
+  const plotlyLayout = {};
+
+  const annotate = (text, x, y) => annotations.push({
+    text, x, y, xref: "paper", yref: "paper", showarrow: false,
+    xanchor: "center", yanchor: "bottom", font: { size: 13 },
+  });
+
+  if (layoutMode === "stacked") {
+    const p1Y = showDiff ? [0.70, 1] : [0.55, 1];
+    const p2Y = showDiff ? [0.38, 0.62] : [0, 0.45];
+    const diffY = [0, 0.22];
+
+    axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x2", yaxis: "y2" } };
+    plotlyLayout.xaxis = { domain: [0, 1], anchor: "y" };
+    plotlyLayout.yaxis = { domain: p1Y };
+    plotlyLayout.xaxis2 = { domain: [0, 1], anchor: "y2", matches: "x" };
+    plotlyLayout.yaxis2 = { domain: p2Y };
+    annotate(name1, 0.5, p1Y[1]);
+    annotate(name2, 0.5, p2Y[1]);
+
+    if (showDiff) {
+      axes.diff = { xaxis: "x3", yaxis: "y3" };
+      plotlyLayout.xaxis3 = { domain: [0, 1], anchor: "y3", matches: "x", title: "Date" };
+      plotlyLayout.yaxis3 = { domain: diffY };
+    } else {
+      plotlyLayout.xaxis2.title = "Date";
+    }
+  } else if (layoutMode === "side-by-side") {
+    const mainY = showDiff ? [0.34, 1] : [0, 1];
+    const gap = 0.06;
+    const p1X = [0, (1 - gap) / 2];
+    const p2X = [(1 - gap) / 2 + gap, 1];
+
+    axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x2", yaxis: "y2" } };
+    plotlyLayout.xaxis = { domain: p1X, anchor: "y" };
+    plotlyLayout.yaxis = { domain: mainY };
+    plotlyLayout.xaxis2 = { domain: p2X, anchor: "y2" };
+    plotlyLayout.yaxis2 = { domain: mainY, matches: "y" };
+    annotate(name1, (p1X[0] + p1X[1]) / 2, mainY[1]);
+    annotate(name2, (p2X[0] + p2X[1]) / 2, mainY[1]);
+
+    if (showDiff) {
+      axes.diff = { xaxis: "x3", yaxis: "y3" };
+      plotlyLayout.xaxis3 = { domain: [0, 1], anchor: "y3", title: "Date" };
+      plotlyLayout.yaxis3 = { domain: [0, 0.22] };
+    } else {
+      plotlyLayout.xaxis2.title = "Date";
+    }
+  } else {
+    // overlay
+    const mainY = showDiff ? [0.34, 1] : [0, 1];
+    axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x", yaxis: "y" } };
+    plotlyLayout.xaxis = { domain: [0, 1], anchor: "y", title: "Date" };
+    plotlyLayout.yaxis = { domain: mainY };
+
+    if (showDiff) {
+      axes.diff = { xaxis: "x2", yaxis: "y2" };
+      plotlyLayout.xaxis2 = { domain: [0, 1], anchor: "y2", matches: "x", title: "Date" };
+      plotlyLayout.yaxis2 = { domain: [0, 0.22] };
+    }
+  }
+
+  plotlyLayout.annotations = annotations;
+
+  // Mirrors the varying figsize() calls in the CLI's matplotlib version --
+  // more panels need more vertical room.
+  const heights = {
+    "overlay": [500, 650],
+    "stacked": [700, 850],
+    "side-by-side": [500, 650],
+  };
+  plotlyLayout.height = heights[layoutMode][showDiff ? 1 : 0];
+
+  return { axes, plotlyLayout };
 }
 
 function renderTable(sections) {
@@ -119,25 +257,46 @@ async function plotSingle(player, stat, season, window, showCumulative) {
   renderTable([{ title: payload.name, records: payload.data }]);
 }
 
-async function plotCompare(player1, player2, stat, season, window, showCumulative) {
+async function plotCompare(player1, player2, stat, season, window, showCumulative, layoutMode, showDiff) {
   const url = `/api/compare?player1=${encodeURIComponent(player1)}&player2=${encodeURIComponent(player2)}&stat=${stat}&season=${season}&window=${window}`;
   const resp = await fetch(url);
   const payload = await resp.json();
   if (!resp.ok) throw new Error(payload.detail || "Request failed");
 
+  const name1 = payload.player1.name;
+  const name2 = payload.player2.name;
+  const { axes, plotlyLayout } = computeComparisonLayout(layoutMode, showDiff, name1, name2);
+
   const traces = [
-    ...buildComparisonTraces(payload.player1.data, payload.player1.name, COLOR1, showCumulative),
-    ...buildComparisonTraces(payload.player2.data, payload.player2.name, COLOR2, showCumulative),
+    ...buildComparisonTraces(payload.player1.data, name1, COLOR1, showCumulative, axes.p1),
+    ...buildComparisonTraces(payload.player2.data, name2, COLOR2, showCumulative, axes.p2),
   ];
-  Plotly.newPlot(chartEl, traces, {
-    title: `${payload.player1.name} vs ${payload.player2.name} — ${payload.label} Rolling ${window}-Game Average (${season} Season)`,
-    yaxis: { title: payload.label },
-    xaxis: { title: "Date" },
-  }, { responsive: true });
+
+  const label = payload.label;
+  plotlyLayout.yaxis.title = label;
+  if (plotlyLayout.yaxis2 && layoutMode !== "overlay") plotlyLayout.yaxis2.title = label;
+
+  if (showDiff) {
+    const { dates, diff } = computeDiff(payload.player1.data, payload.player2.data);
+    traces.push(...buildDiffTraces(dates, diff, COLOR1, COLOR2, axes.diff));
+    plotlyLayout.yaxis3 ? (plotlyLayout.yaxis3.title = `${label} diff<br>(${name1} − ${name2})`)
+                        : (plotlyLayout.yaxis2.title = `${label} diff<br>(${name1} − ${name2})`);
+    plotlyLayout.shapes = [{
+      type: "line", xref: "paper", x0: 0, x1: 1,
+      yref: axes.diff.yaxis, y0: 0, y1: 0,
+      line: { color: "gray", width: 1 },
+    }];
+  }
+
+  plotlyLayout.title = layoutMode === "overlay"
+    ? `${name1} vs ${name2} — ${label} Rolling ${window}-Game Average (${season} Season)`
+    : `${label} Rolling ${window}-Game Average (${season} Season)`;
+
+  Plotly.newPlot(chartEl, traces, plotlyLayout, { responsive: true });
 
   renderTable([
-    { title: payload.player1.name, records: payload.player1.data },
-    { title: payload.player2.name, records: payload.player2.data },
+    { title: name1, records: payload.player1.data },
+    { title: name2, records: payload.player2.data },
   ]);
 }
 
@@ -151,10 +310,12 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
   const season = document.getElementById("season").value;
   const window = document.getElementById("window").value;
   const showCumulative = document.getElementById("showCumulative").checked;
+  const layoutMode = document.getElementById("layout").value;
+  const showDiff = document.getElementById("showDiff").checked;
 
   try {
     if (player2) {
-      await plotCompare(player1, player2, stat, season, window, showCumulative);
+      await plotCompare(player1, player2, stat, season, window, showCumulative, layoutMode, showDiff);
     } else {
       await plotSingle(player1, stat, season, window, showCumulative);
     }
