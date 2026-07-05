@@ -2,8 +2,11 @@ from typing import Any
 
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 
 from mlb_stats.stats import get_stat_config
+
+COMPARISON_LAYOUTS = ("overlay", "stacked", "side-by-side")
 
 
 def _parse_innings_pitched(value: Any) -> float:
@@ -136,6 +139,34 @@ def plot_stat(
     _finish_plot(save_path)
 
 
+def _reindexed_rolling_diff(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+    """Compute player1's rolling value minus player2's, reindexed onto the
+    union of both players' game dates. A player's rolling value holds
+    (forward-fill) between their games until their next one, since the
+    two players are rarely on the same game schedule."""
+    s1 = df1.set_index("date")["rolling"]
+    s2 = df2.set_index("date")["rolling"]
+    all_dates = s1.index.union(s2.index).sort_values()
+    diff = s1.reindex(all_dates).ffill() - s2.reindex(all_dates).ffill()
+    return pd.DataFrame({"date": all_dates, "diff": diff.to_numpy()})
+
+
+def _draw_diff_panel(
+    ax: Axes, df1: pd.DataFrame, name1: str, df2: pd.DataFrame, name2: str,
+    color1: str, color2: str, label: str,
+) -> None:
+    diff_df = _reindexed_rolling_diff(df1, df2)
+    ax.fill_between(diff_df["date"], diff_df["diff"], 0,
+                     where=(diff_df["diff"] >= 0), color=color1, alpha=0.3, interpolate=True)
+    ax.fill_between(diff_df["date"], diff_df["diff"], 0,
+                     where=(diff_df["diff"] < 0), color=color2, alpha=0.3, interpolate=True)
+    ax.plot(diff_df["date"], diff_df["diff"], color="black", linewidth=1)
+    ax.axhline(0, color="gray", linewidth=1)
+    ax.set_ylabel(f"{label} diff\n({name1} − {name2})")
+    ax.set_xlabel("Date")
+    ax.tick_params(axis="x", rotation=45)
+
+
 def plot_stat_comparison(
     df1: pd.DataFrame,
     name1: str,
@@ -145,20 +176,86 @@ def plot_stat_comparison(
     window: int,
     stat_key: str,
     save_path: str | None = None,
+    show_cumulative: bool = False,
+    layout: str = "overlay",
+    show_diff: bool = False,
 ) -> None:
-    """Render a two-player comparison plot, overlaying each player's rolling
-    stat (the cumulative lines are dropped here since four lines together
-    gets cluttered)."""
+    """Render a two-player comparison plot.
+
+    layout: "overlay" (default, both players on one axes, matches the
+    original comparison view), "stacked" (one axes per player, stacked
+    vertically), or "side-by-side" (one axes per player, side by side).
+
+    show_cumulative additionally draws each player's season-cumulative
+    line (dashed, lower alpha) alongside their rolling line.
+
+    show_diff adds a panel below showing player1's rolling value minus
+    player2's (see _reindexed_rolling_diff).
+    """
+    if layout not in COMPARISON_LAYOUTS:
+        raise ValueError(f"Unknown layout '{layout}'. Choose from: {', '.join(COMPARISON_LAYOUTS)}")
+
     config = get_stat_config(stat_key)
     label = config["label"]
+    color1, color2 = "crimson", "steelblue"
 
-    plt.figure(figsize=(11, 5))
-    plt.plot(df1["date"], df1["rolling"], label=name1, color="crimson", linewidth=2)
-    plt.plot(df2["date"], df2["rolling"], label=name2, color="steelblue", linewidth=2)
-    plt.title(f"{name1} vs {name2} — {label} Rolling {window}-Game Average ({season} Season)")
-    plt.ylabel(label)
-    plt.xlabel("Date")
-    plt.legend()
-    plt.xticks(rotation=45)
+    extra_height = 2.5 if show_diff else 0
+
+    if layout == "stacked":
+        fig = plt.figure(figsize=(11, 8 + extra_height))
+        gs = fig.add_gridspec(2 + (1 if show_diff else 0), 1,
+                               height_ratios=[3, 3] + ([2] if show_diff else []))
+        ax1 = fig.add_subplot(gs[0])
+        ax2 = fig.add_subplot(gs[1], sharex=ax1)
+        panels = [(ax1, df1, name1, color1), (ax2, df2, name2, color2)]
+        diff_ax = fig.add_subplot(gs[2], sharex=ax1) if show_diff else None
+    elif layout == "side-by-side":
+        fig = plt.figure(figsize=(13, 5 + extra_height))
+        gs = fig.add_gridspec(1 + (1 if show_diff else 0), 2,
+                               height_ratios=[3] + ([2] if show_diff else []))
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[0, 1], sharey=ax1)
+        panels = [(ax1, df1, name1, color1), (ax2, df2, name2, color2)]
+        diff_ax = fig.add_subplot(gs[1, :]) if show_diff else None
+    else:
+        fig = plt.figure(figsize=(11, 5 + extra_height))
+        gs = fig.add_gridspec(1 + (1 if show_diff else 0), 1,
+                               height_ratios=[3] + ([2] if show_diff else []))
+        ax = fig.add_subplot(gs[0])
+        panels = [(ax, df1, name1, color1), (ax, df2, name2, color2)]
+        diff_ax = fig.add_subplot(gs[1], sharex=ax) if show_diff else None
+
+    for ax, df, name, color in panels:
+        line_label = name if layout == "overlay" else f"Rolling {window}-game {label}"
+        ax.plot(df["date"], df["rolling"], label=line_label, color=color, linewidth=2)
+        if show_cumulative:
+            # Hide the same early-season warm-up period the rolling line
+            # already omits (fewer than `window` games), since a rate stat
+            # computed from a handful of games can be wildly noisy and
+            # dwarf the rest of the season on a shared axis.
+            cumulative = df["cumulative"].copy()
+            cumulative.iloc[: window - 1] = float("nan")
+            cumulative_label = f"{name} season cumulative" if layout == "overlay" else f"Season cumulative {label}"
+            ax.plot(df["date"], cumulative, label=cumulative_label,
+                    color=color, linewidth=1.5, linestyle="--", alpha=0.4)
+
+    if layout == "overlay":
+        ax.set_ylabel(label)
+        ax.set_xlabel("Date")
+        ax.legend()
+        ax.tick_params(axis="x", rotation=45)
+        ax.set_title(f"{name1} vs {name2} — {label} Rolling {window}-Game Average ({season} Season)")
+    else:
+        for ax, _, name, _ in panels:
+            ax.set_ylabel(label)
+            ax.legend()
+            ax.tick_params(axis="x", rotation=45)
+            ax.set_title(name)
+        panels[-1][0].set_xlabel("Date")
+        fig.suptitle(f"{label} Rolling {window}-Game Average ({season} Season)")
+
+    if diff_ax is not None:
+        _draw_diff_panel(diff_ax, df1, name1, df2, name2, color1, color2, label)
+
     plt.tight_layout()
     _finish_plot(save_path)
