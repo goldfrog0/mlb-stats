@@ -6,7 +6,7 @@ from matplotlib.axes import Axes
 
 from mlb_stats.stats import get_stat_config
 
-COMPARISON_LAYOUTS = ("overlay", "stacked", "side-by-side")
+COMPARISON_LAYOUTS = ("overlay", "stacked", "side-by-side", "chefs-special")
 
 
 def _parse_innings_pitched(value: Any) -> float:
@@ -184,7 +184,9 @@ def plot_stat_comparison(
 
     layout: "overlay" (default, both players on one axes, matches the
     original comparison view), "stacked" (one axes per player, stacked
-    vertically), or "side-by-side" (one axes per player, side by side).
+    vertically), "side-by-side" (one axes per player, side by side), or
+    "chefs-special" (side-by-side layout with cumulative lines and the
+    diff panel forced on, regardless of show_cumulative/show_diff).
 
     show_cumulative additionally draws each player's season-cumulative
     line (dashed, lower alpha) alongside their rolling line.
@@ -194,6 +196,11 @@ def plot_stat_comparison(
     """
     if layout not in COMPARISON_LAYOUTS:
         raise ValueError(f"Unknown layout '{layout}'. Choose from: {', '.join(COMPARISON_LAYOUTS)}")
+
+    if layout == "chefs-special":
+        layout = "side-by-side"
+        show_cumulative = True
+        show_diff = True
 
     config = get_stat_config(stat_key)
     label = config["label"]
