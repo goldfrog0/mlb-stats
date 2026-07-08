@@ -36,6 +36,14 @@ def _parse_field(value: Any, field_name: str) -> float:
     return _to_float(value)
 
 
+def _weighted_numerator(df: pd.DataFrame, numerator_fields: dict[str, float]) -> pd.Series:
+    return sum(df[field] * weight for field, weight in numerator_fields.items())
+
+
+def _denominator(df: pd.DataFrame, denominator_fields: list[str]) -> pd.Series:
+    return sum(df[field] for field in denominator_fields)
+
+
 def build_stat_dataframe(splits: list[dict[str, Any]], stat_key: str) -> pd.DataFrame:
     """Flatten raw API splits into a DataFrame with the fields needed to
     compute and roll up stat_key."""
@@ -45,11 +53,12 @@ def build_stat_dataframe(splits: list[dict[str, Any]], stat_key: str) -> pd.Data
     rows = []
     for s in splits:
         stat = s["stat"]
-        row = {
+        row: dict[str, Any] = {
             "date": s["date"],
             "opponent": s["opponent"]["name"],
-            "cumulative": _to_float(stat.get(config["cumulative_field"])),
         }
+        if config["cumulative_field"] is not None:
+            row["cumulative"] = _to_float(stat.get(config["cumulative_field"]))
         for field in fields:
             row[field] = _parse_field(stat.get(field), field)
         rows.append(row)
@@ -57,6 +66,16 @@ def build_stat_dataframe(splits: list[dict[str, Any]], stat_key: str) -> pd.Data
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date").reset_index(drop=True)
+
+    if config["cumulative_field"] is None:
+        # No season-cumulative field for this stat in the API (e.g. FIP) --
+        # compute it ourselves from the cumulative numerator/denominator.
+        numerator = _weighted_numerator(df, config["numerator_fields"])
+        denominator = _denominator(df, config["denominator_fields"])
+        df["cumulative"] = (
+            (numerator.cumsum() / denominator.cumsum()) * config["multiplier"] + config.get("constant", 0.0)
+        )
+
     return df
 
 
@@ -66,32 +85,36 @@ def add_rolling_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.DataFra
     mathematically invalid for a rate stat)."""
     config = get_stat_config(stat_key)
 
-    numerator = sum(df[f] for f in config["numerator_fields"])
-    denominator = sum(df[f] for f in config["denominator_fields"])
+    numerator = _weighted_numerator(df, config["numerator_fields"])
+    denominator = _denominator(df, config["denominator_fields"])
 
     rolling_numerator = numerator.rolling(window=window).sum()
     rolling_denominator = denominator.rolling(window=window).sum()
 
-    df["rolling"] = (rolling_numerator / rolling_denominator) * config["multiplier"]
+    df["rolling"] = (rolling_numerator / rolling_denominator) * config["multiplier"] + config.get("constant", 0.0)
     return df
+
+
+def compute_game_value(df: pd.DataFrame, stat_key: str) -> pd.Series:
+    """This game's own value of stat_key (not season-cumulative or
+    rolling), computed from that row's own numerator/denominator fields."""
+    config = get_stat_config(stat_key)
+    numerator = _weighted_numerator(df, config["numerator_fields"])
+    denominator = _denominator(df, config["denominator_fields"])
+    return (numerator / denominator) * config["multiplier"] + config.get("constant", 0.0)
 
 
 def format_stat_table(df: pd.DataFrame, stat_key: str) -> str:
     """Render the per-game data behind the plot (date, opponent, this
     game's own value, season-cumulative value, rolling value) as a plain
     aligned text table."""
-    config = get_stat_config(stat_key)
     game_col = f"game_{stat_key}"
     season_col = f"season_{stat_key}"
     rolling_col = f"rolling_{stat_key}"
 
-    game_numerator = sum(df[f] for f in config["numerator_fields"])
-    game_denominator = sum(df[f] for f in config["denominator_fields"])
-    game_value = (game_numerator / game_denominator) * config["multiplier"]
-
     table = df[["date", "opponent"]].copy()
     table["date"] = table["date"].dt.strftime("%Y-%m-%d")
-    table[game_col] = game_value.round(3)
+    table[game_col] = compute_game_value(df, stat_key).round(3)
     table[season_col] = df["cumulative"].round(3)
     table[rolling_col] = df["rolling"].round(3)
 

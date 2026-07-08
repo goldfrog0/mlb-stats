@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from mlb_stats.api import find_player, get_game_log
-from mlb_stats.plots import build_stat_dataframe, add_rolling_stat
+from mlb_stats.plots import build_stat_dataframe, add_rolling_stat, compute_game_value
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 
 app = FastAPI(title="MLB Stats")
@@ -35,11 +35,7 @@ def _load_stat_dataframe(player_name: str, season: int, stat_key: str, window: i
     splits = get_game_log(player_id, season, config["group"])
     df = build_stat_dataframe(splits, stat_key)
     df = add_rolling_stat(df, stat_key, window)
-
-    game_numerator = sum(df[f] for f in config["numerator_fields"])
-    game_denominator = sum(df[f] for f in config["denominator_fields"])
-    df["game"] = (game_numerator / game_denominator) * config["multiplier"]
-
+    df["game"] = compute_game_value(df, stat_key)
     return df, full_name
 
 

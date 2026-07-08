@@ -44,6 +44,7 @@ Pitching:
   whip   Walks + Hits per Inning Pitched
   k9     Strikeouts per 9 innings
   bb9    Walks per 9 innings
+  fip    Fielding Independent Pitching
 
 Batting:
   avg    Batting average
@@ -55,6 +56,15 @@ Batting:
 
 The tool automatically requests the right stat group (pitching vs
 batting) from the API based on which --stat you pick.
+
+A note on FIP: unlike the other stats here, the MLB Stats API doesn't
+return a season-cumulative FIP value, so the "season cumulative" line
+is computed locally from cumulative HR/BB/HBP/K/IP. Also, FIP's
+constant term (which puts it on the same scale as ERA) is normally
+recalculated by MLB every season from league-wide totals -- this tool
+uses a fixed, commonly-cited approximation (3.10) rather than the
+exact value for whichever season you're looking at, so FIP numbers
+will be close but not perfectly official.
 
 
 COMPARING TWO PLAYERS
