@@ -137,13 +137,28 @@ OPTIONS
        mlb-stats "Shohei Ohtani" --window 3
        mlb-stats "Shohei Ohtani" --window 8
 
---save FILE
+--save [FILE]
      Save the chart to a PNG file instead of opening a display window.
      Useful for headless machines or just keeping a permanent copy.
      Works for both single-player and comparison charts.
 
        mlb-stats "Clayton Kershaw" --save kershaw.png
        mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --save compare.png
+
+     Leave FILE off to auto-generate a name from the player(s), stat,
+     and season, e.g. shohei-ohtani_era_2026_2026-07-07.png or
+     shohei-ohtani_vs_paul-skenes_era_2026_2026-07-07.png. --window,
+     --layout, --show-cumulative, and --diff get appended to the name
+     only when you've changed them from their defaults, e.g.
+     shohei-ohtani_vs_paul-skenes_era_2026_w10_stacked_cumulative_diff_2026-07-07.png.
+     The trailing date is today's date (when the plot was generated,
+     not the season), so re-running the same command tomorrow won't
+     overwrite today's file. Saves into the current directory and
+     overwrites an existing file of the same name, same as passing
+     that name explicitly would.
+
+       mlb-stats "Shohei Ohtani" --save
+       mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --layout stacked --diff --save
 
 --table
      Also print the per-game data behind the chart as a plain text

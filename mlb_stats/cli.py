@@ -1,4 +1,6 @@
 import argparse
+import datetime
+import re
 
 import pandas as pd
 
@@ -13,6 +15,9 @@ from mlb_stats.plots import (
 )
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 
+DEFAULT_WINDOW = 5
+AUTO_SAVE = "__auto__"  # sentinel for --save passed with no filename
+
 
 def _load_stat_dataframe(player_name: str, season: int, stat_key: str, window: int) -> tuple[pd.DataFrame, str]:
     """Look up a player, pull their game log for stat_key, and return the
@@ -23,6 +28,39 @@ def _load_stat_dataframe(player_name: str, season: int, stat_key: str, window: i
     df = build_stat_dataframe(splits, stat_key)
     df = add_rolling_stat(df, stat_key, window)
     return df, full_name
+
+
+def _slugify(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def _today_str() -> str:
+    return datetime.date.today().isoformat()
+
+
+def _auto_filename_single(player: str, stat: str, season: int, window: int) -> str:
+    name = f"{_slugify(player)}_{stat}_{season}"
+    if window != DEFAULT_WINDOW:
+        name += f"_w{window}"
+    name += f"_{_today_str()}"
+    return f"{name}.png"
+
+
+def _auto_filename_compare(
+    player1: str, player2: str, stat: str, season: int, window: int,
+    layout: str, show_cumulative: bool, show_diff: bool,
+) -> str:
+    name = f"{_slugify(player1)}_vs_{_slugify(player2)}_{stat}_{season}"
+    if window != DEFAULT_WINDOW:
+        name += f"_w{window}"
+    if layout != "overlay":
+        name += f"_{layout}"
+    if show_cumulative:
+        name += "_cumulative"
+    if show_diff:
+        name += "_diff"
+    name += f"_{_today_str()}"
+    return f"{name}.png"
 
 
 def main() -> None:
@@ -36,9 +74,13 @@ def main() -> None:
     parser.add_argument("--stat", type=str, default="era", choices=sorted(STAT_CONFIGS),
                         help="Stat to plot (default: era)")
     parser.add_argument("--season", type=int, default=2026, help="Season year (default: 2026)")
-    parser.add_argument("--window", type=int, default=5, help="Rolling average window (default: 5)")
-    parser.add_argument("--save", type=str, default=None, metavar="FILE",
-                        help="Save plot to file instead of displaying e.g. ohtani.png")
+    parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
+                        help=f"Rolling average window (default: {DEFAULT_WINDOW})")
+    parser.add_argument("--save", type=str, nargs="?", const=AUTO_SAVE, default=None, metavar="FILE",
+                        help="Save plot to file instead of displaying. Give a FILE to name it "
+                             "yourself, or pass --save with no FILE to auto-generate one from "
+                             "the player(s)/stat/season (and window/layout/diff/cumulative when "
+                             "non-default), e.g. shohei-ohtani_era_2026.png")
     parser.add_argument("--table", action="store_true",
                         help="Also print the plotted data as a text table")
     parser.add_argument("--layout", type=str, default="overlay", choices=COMPARISON_LAYOUTS,
@@ -64,8 +106,15 @@ def main() -> None:
                     print("-" * len(name))
                     print(format_stat_table(df, args.stat))
 
+            save_path = args.save
+            if save_path == AUTO_SAVE:
+                save_path = _auto_filename_compare(
+                    name1, name2, args.stat, args.season, args.window,
+                    args.layout, args.show_cumulative, args.diff,
+                )
+
             plot_stat_comparison(df1, name1, df2, name2, args.season, args.window, args.stat,
-                                  save_path=args.save, show_cumulative=args.show_cumulative,
+                                  save_path=save_path, show_cumulative=args.show_cumulative,
                                   layout=args.layout, show_diff=args.diff)
         else:
             df, full_name = _load_stat_dataframe(args.player, args.season, args.stat, args.window)
@@ -75,7 +124,11 @@ def main() -> None:
                 print("-" * len(full_name))
                 print(format_stat_table(df, args.stat))
 
-            plot_stat(df, full_name, args.season, args.window, args.stat, save_path=args.save)
+            save_path = args.save
+            if save_path == AUTO_SAVE:
+                save_path = _auto_filename_single(full_name, args.stat, args.season, args.window)
+
+            plot_stat(df, full_name, args.season, args.window, args.stat, save_path=save_path)
 
     except ValueError as e:
         print(f"Error: {e}")
