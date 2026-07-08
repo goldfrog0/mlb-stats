@@ -106,3 +106,11 @@ h2 {
   font-size: 1rem;
   margin: 1rem 0 0.25rem;
 }
+
+#disclaimer {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+  font-size: 0.75rem;
+  color: #888;
+}

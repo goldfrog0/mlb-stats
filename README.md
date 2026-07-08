@@ -62,3 +62,10 @@ mlb_stats/
 pip install mypy
 mypy mlb_stats --ignore-missing-imports
 ```
+
+## Disclaimer
+
+Not affiliated with, endorsed by, or sponsored by MLB or MLB Advanced
+Media. Data is pulled from the unofficial MLB Stats API
+(statsapi.mlb.com), which is undocumented and not officially supported
+for third-party use.
