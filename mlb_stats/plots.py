@@ -44,11 +44,21 @@ def _denominator(df: pd.DataFrame, denominator_fields: list[str]) -> pd.Series:
     return sum(df[field] for field in denominator_fields)
 
 
+def _fields_for_stat(stat_key: str) -> set[str]:
+    config = get_stat_config(stat_key)
+    if "composite_of" in config:
+        fields: set[str] = set()
+        for component_key in config["composite_of"]:
+            fields |= _fields_for_stat(component_key)
+        return fields
+    return set(config["numerator_fields"]) | set(config["denominator_fields"])
+
+
 def build_stat_dataframe(splits: list[dict[str, Any]], stat_key: str) -> pd.DataFrame:
     """Flatten raw API splits into a DataFrame with the fields needed to
     compute and roll up stat_key."""
     config = get_stat_config(stat_key)
-    fields = set(config["numerator_fields"]) | set(config["denominator_fields"])
+    fields = _fields_for_stat(stat_key)
 
     rows = []
     for s in splits:
@@ -79,11 +89,10 @@ def build_stat_dataframe(splits: list[dict[str, Any]], stat_key: str) -> pd.Data
     return df
 
 
-def add_rolling_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.DataFrame:
-    """Add a rolling stat column computed from summed numerator/denominator
-    fields over the window (not by averaging per-game rates, which is
-    mathematically invalid for a rate stat)."""
+def _rolling_value_for_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.Series:
     config = get_stat_config(stat_key)
+    if "composite_of" in config:
+        return sum(_rolling_value_for_stat(df, component, window) for component in config["composite_of"])
 
     numerator = _weighted_numerator(df, config["numerator_fields"])
     denominator = _denominator(df, config["denominator_fields"])
@@ -91,7 +100,14 @@ def add_rolling_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.DataFra
     rolling_numerator = numerator.rolling(window=window).sum()
     rolling_denominator = denominator.rolling(window=window).sum()
 
-    df["rolling"] = (rolling_numerator / rolling_denominator) * config["multiplier"] + config.get("constant", 0.0)
+    return (rolling_numerator / rolling_denominator) * config["multiplier"] + config.get("constant", 0.0)
+
+
+def add_rolling_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.DataFrame:
+    """Add a rolling stat column computed from summed numerator/denominator
+    fields over the window (not by averaging per-game rates, which is
+    mathematically invalid for a rate stat)."""
+    df["rolling"] = _rolling_value_for_stat(df, stat_key, window)
     return df
 
 
@@ -99,6 +115,8 @@ def compute_game_value(df: pd.DataFrame, stat_key: str) -> pd.Series:
     """This game's own value of stat_key (not season-cumulative or
     rolling), computed from that row's own numerator/denominator fields."""
     config = get_stat_config(stat_key)
+    if "composite_of" in config:
+        return sum(compute_game_value(df, component) for component in config["composite_of"])
     numerator = _weighted_numerator(df, config["numerator_fields"])
     denominator = _denominator(df, config["denominator_fields"])
     return (numerator / denominator) * config["multiplier"] + config.get("constant", 0.0)

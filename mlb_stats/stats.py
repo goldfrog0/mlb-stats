@@ -30,10 +30,11 @@ class StatConfig(TypedDict):
     label: str
     group: str
     cumulative_field: str | None
-    numerator_fields: dict[str, float]
-    denominator_fields: list[str]
-    multiplier: float
+    numerator_fields: NotRequired[dict[str, float]]
+    denominator_fields: NotRequired[list[str]]
+    multiplier: NotRequired[float]
     constant: NotRequired[float]
+    composite_of: NotRequired[list[str]]
 
 
 STAT_CONFIGS: dict[str, StatConfig] = {
@@ -108,6 +109,12 @@ STAT_CONFIGS: dict[str, StatConfig] = {
         "numerator_fields": {"totalBases": 1},
         "denominator_fields": ["atBats"],
         "multiplier": 1,
+    },
+    "ops": {
+        "label": "OPS",
+        "group": "batting",
+        "cumulative_field": "ops",
+        "composite_of": ["obp", "slg"],
     },
 }
 
