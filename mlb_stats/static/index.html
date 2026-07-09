@@ -2,63 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <title>MLB Stats</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 </head>
 <body>
-  <h1>MLB Player Stat Viewer</h1>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>MLB Player<br>Stat Viewer</h1>
 
-  <form id="controls">
-    <div class="field">
-      <label for="player1">Player</label>
-      <input id="player1" type="text" placeholder="Shohei Ohtani" required>
-    </div>
-    <div class="field">
-      <label for="player2">Compare against (optional)</label>
-      <input id="player2" type="text" placeholder="Paul Skenes">
-    </div>
-    <div class="field">
-      <label for="stat">Stat</label>
-      <select id="stat"></select>
-    </div>
-    <div class="field">
-      <label for="season">Season</label>
-      <input id="season" type="number" value="2026">
-    </div>
-    <div class="field">
-      <label for="window">Rolling window</label>
-      <input id="window" type="number" value="5" min="1">
-    </div>
-    <div class="field checkbox">
-      <label><input id="showCumulative" type="checkbox"> Show cumulative line</label>
-    </div>
-    <div class="field checkbox">
-      <label><input id="showTable" type="checkbox"> Show data table</label>
-    </div>
-    <div class="field compare-only">
-      <label for="layout">Layout (comparison only)</label>
-      <select id="layout">
-        <option value="overlay" selected>Overlay</option>
-        <option value="stacked">Stacked</option>
-        <option value="side-by-side">Side by side</option>
-      </select>
-    </div>
-    <div class="field checkbox compare-only">
-      <label><input id="showDiff" type="checkbox"> Show diff panel (comparison only)</label>
-    </div>
-    <button type="submit">Plot</button>
-  </form>
+      <form id="controls">
+        <div class="field">
+          <label for="player1">Player</label>
+          <input id="player1" type="text" placeholder="Shohei Ohtani" required>
+        </div>
+        <div class="field">
+          <label for="player2">Compare against <span class="hint">(optional)</span></label>
+          <input id="player2" type="text" placeholder="Paul Skenes">
+        </div>
+        <div class="field">
+          <label for="stat">Stat</label>
+          <select id="stat"></select>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="season">Season</label>
+            <input id="season" type="number" value="2026">
+          </div>
+          <div class="field">
+            <label for="window">Rolling window</label>
+            <input id="window" type="number" value="5" min="1">
+          </div>
+        </div>
+        <div class="field checkbox">
+          <label><input id="showCumulative" type="checkbox"> Show cumulative line</label>
+        </div>
+        <div class="field checkbox">
+          <label><input id="showTable" type="checkbox"> Show data table</label>
+        </div>
 
-  <p id="error" class="error"></p>
+        <div class="section-label">Comparison options</div>
+        <div class="field compare-only">
+          <label for="layout">Layout</label>
+          <select id="layout">
+            <option value="overlay" selected>Overlay</option>
+            <option value="stacked">Stacked</option>
+            <option value="side-by-side">Side by side</option>
+          </select>
+        </div>
+        <div class="field checkbox compare-only">
+          <label><input id="showDiff" type="checkbox"> Show diff panel</label>
+        </div>
 
-  <div id="chart"></div>
-  <div id="tableContainer"></div>
+        <button type="submit">Plot</button>
+      </form>
 
-  <footer id="disclaimer">
-    Not affiliated with, endorsed by, or sponsored by MLB or MLB Advanced
-    Media. Data via the unofficial MLB Stats API (statsapi.mlb.com).
-  </footer>
+      <footer id="disclaimer">
+        Not affiliated with, endorsed by, or sponsored by MLB or MLB Advanced
+        Media. Data via the unofficial MLB Stats API (statsapi.mlb.com).
+      </footer>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <span id="error" class="error"></span>
+      </header>
+
+      <div class="content">
+        <div id="chartCard" class="card">
+          <div id="chart"></div>
+        </div>
+        <div id="tableContainer"></div>
+      </div>
+    </main>
+  </div>
 
   <script src="app.js"></script>
 </body>

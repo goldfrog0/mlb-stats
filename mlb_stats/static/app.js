@@ -322,6 +322,9 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
   } catch (err) {
     showError(err.message);
     Plotly.purge(chartEl);
+    // purge empties the div but leaves the js-plotly-plot class behind,
+    // which would keep the chart card visible as an empty white box
+    chartEl.className = "";
     tableContainer.innerHTML = "";
   }
 });
