@@ -1,6 +1,17 @@
 const COLOR1 = "crimson";
 const COLOR2 = "steelblue";
 
+// Horizontal legend below the chart instead of Plotly's default vertical
+// legend on the right, which eats horizontal space the chart needs on
+// narrow/mobile viewports.
+const HORIZONTAL_LEGEND = {
+  orientation: "h",
+  x: 0.5,
+  xanchor: "center",
+  y: -0.18,
+  yanchor: "top",
+};
+
 const statSelect = document.getElementById("stat");
 const errorEl = document.getElementById("error");
 const chartEl = document.getElementById("chart");
@@ -208,15 +219,19 @@ function computeComparisonLayout(layoutMode, showDiff, name1, name2) {
   }
 
   plotlyLayout.annotations = annotations;
+  plotlyLayout.legend = HORIZONTAL_LEGEND;
+  plotlyLayout.margin = { b: 110 };
 
   // Mirrors the varying figsize() calls in the CLI's matplotlib version --
-  // more panels need more vertical room.
+  // more panels need more vertical room. The +70 accounts for the
+  // horizontal legend row below the chart (see HORIZONTAL_LEGEND) so it
+  // doesn't eat into the plotted area itself.
   const heights = {
     "overlay": [500, 650],
     "stacked": [700, 850],
     "side-by-side": [500, 650],
   };
-  plotlyLayout.height = heights[layoutMode][showDiff ? 1 : 0];
+  plotlyLayout.height = heights[layoutMode][showDiff ? 1 : 0] + 70;
 
   return { axes, plotlyLayout };
 }
@@ -252,6 +267,8 @@ async function plotSingle(player, stat, season, window, showCumulative) {
     title: `${payload.name} — ${payload.label} Over Time (${season} Season)`,
     yaxis: { title: payload.label },
     xaxis: { title: "Date" },
+    legend: HORIZONTAL_LEGEND,
+    margin: { b: 110 },
   }, { responsive: true });
 
   renderTable([{ title: payload.name, records: payload.data }]);
