@@ -36,13 +36,38 @@ mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --layout stacked --diff
 See [HOW_TO_USE.txt](HOW_TO_USE.txt) for the full list of stats,
 options, and examples.
 
-### Browser UI
+### Browser UI (development)
 
 ```bash
 uvicorn mlb_stats.web:app --reload
 ```
 
-Then open http://127.0.0.1:8000.
+Then open http://127.0.0.1:8000. `--reload` picks up source changes
+automatically, which is what you want while developing.
+
+### Browser UI (production)
+
+For real serving, run under gunicorn, which supervises a pool of
+uvicorn workers (restarting any that die or hang) and load-balances
+across them:
+
+```bash
+gunicorn mlb_stats.web:app
+```
+
+Settings live in [gunicorn.conf.py](gunicorn.conf.py) (picked up
+automatically) and can be overridden with environment variables:
+
+```bash
+HOST=0.0.0.0 PORT=8080 WEB_CONCURRENCY=4 gunicorn mlb_stats.web:app
+```
+
+By default it binds to `127.0.0.1:8000` — the right posture behind a
+reverse proxy like nginx or caddy, which is how you'd want TLS and
+compression handled in a real deployment. Set `HOST=0.0.0.0` to expose
+it directly on your network instead. Worker count defaults to
+`2 × CPU cores + 1`; override with `WEB_CONCURRENCY`. Note that
+gunicorn is Unix-only (Linux/macOS).
 
 ## Project layout
 
@@ -54,6 +79,7 @@ mlb_stats/
 ├── cli.py      # CLI entry point (mlb-stats command)
 ├── web.py      # FastAPI backend (JSON endpoints for the browser UI)
 └── static/     # Browser UI frontend (HTML/CSS/JS, Plotly.js)
+gunicorn.conf.py  # Production server config (workers, bind, logging)
 ```
 
 ## Development

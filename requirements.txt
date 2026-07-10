@@ -3,3 +3,5 @@ pandas
 matplotlib
 fastapi
 uvicorn[standard]
+gunicorn
+uvicorn-worker
