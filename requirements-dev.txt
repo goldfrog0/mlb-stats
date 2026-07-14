@@ -1,0 +1,5 @@
+# Development-only tooling (runtime deps live in requirements.txt)
+pytest
+httpx        # required by fastapi.testclient
+mypy
+ruff

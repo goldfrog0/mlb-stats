@@ -79,14 +79,58 @@ mlb_stats/
 ├── cli.py      # CLI entry point (mlb-stats command)
 ├── web.py      # FastAPI backend (JSON endpoints for the browser UI)
 └── static/     # Browser UI frontend (HTML/CSS/JS, Plotly.js)
+tests/            # pytest suite (see Development below)
 gunicorn.conf.py  # Production server config (workers, bind, logging)
 ```
 
 ## Development
 
+Dev tooling is separate from the runtime dependencies:
+
 ```bash
-pip install mypy
+pip install -r requirements-dev.txt
+```
+
+### Running the tests
+
+```bash
+pytest
+```
+
+The suite runs entirely offline and takes a couple of seconds — no MLB
+API calls are made. Tests use synthetic game logs shaped exactly like
+real API responses (built in `tests/conftest.py`, with small
+hand-checkable numbers), and the two network-facing functions
+(`find_player`, `get_game_log`) are monkeypatched wherever a test
+exercises code that would otherwise hit the network.
+
+What lives where:
+
+| File | Covers |
+| --- | --- |
+| `tests/test_plots.py` | The data pipeline: innings-pitched box-score parsing ("6.2" = 6⅔), rolling windows summing counts (not averaging rates), per-game values, FIP's weights/constant, OPS as a composite |
+| `tests/test_stats.py` | Stat-registry consistency, so a malformed new entry fails a test instead of crashing at runtime |
+| `tests/test_cli.py` | The `mlb-stats` command end to end: argument parsing, chart files actually written, `--table` output, auto-generated filenames, exit codes on errors |
+| `tests/test_web.py` | The FastAPI endpoints via `TestClient` (no server needed): JSON shapes, NaN→null serialization, 404s, validation errors, the static frontend |
+
+Useful variations:
+
+```bash
+pytest -v                  # list every test as it runs
+pytest tests/test_cli.py   # one file
+pytest -k rolling          # tests matching a keyword
+```
+
+When adding a stat or feature, the usual pattern is: extend the fixture
+data in `tests/conftest.py` if new fields are needed, then assert
+against values you computed by hand — not values re-derived with the
+same code under test.
+
+### Type checking and linting
+
+```bash
 mypy mlb_stats --ignore-missing-imports
+ruff check mlb_stats tests
 ```
 
 ## Disclaimer

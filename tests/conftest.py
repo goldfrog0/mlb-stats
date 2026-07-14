@@ -1,0 +1,93 @@
+"""Shared test fixtures.
+
+The whole suite runs offline: these fixtures produce synthetic game-log
+"splits" in exactly the shape the MLB Stats API returns them (see
+mlb_stats/api.py), with small hand-checkable numbers so tests can assert
+against values computed by hand rather than re-derived by the same code
+under test.
+"""
+
+# Force a non-interactive matplotlib backend before mlb_stats.plots ever
+# imports pyplot, so CLI tests can render without a display.
+import matplotlib
+
+matplotlib.use("Agg")
+
+from typing import Any  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+def _split(date: str, opponent: str, stat: dict[str, Any]) -> dict[str, Any]:
+    return {"date": date, "opponent": {"name": opponent}, "stat": stat}
+
+
+@pytest.fixture
+def pitching_splits() -> list[dict[str, Any]]:
+    """Six starts. Innings are all 6.0 except the last, which uses the
+    box-score notation "6.2" = 6 and 2/3 innings (the parsing bug this
+    project once had). Cumulative "era" strings are what the API would
+    report for these totals.
+    """
+    earned_runs = [0, 1, 2, 3, 4, 5]
+    innings = ["6.0", "6.0", "6.0", "6.0", "6.0", "6.2"]
+    walks = [1, 2, 1, 2, 1, 2]
+    hits = [4, 5, 6, 4, 5, 6]
+    strikeouts = [7, 6, 5, 8, 7, 6]
+    home_runs = [0, 1, 0, 1, 0, 1]
+    hit_batsmen = [0, 0, 1, 0, 0, 1]
+    cumulative_era = ["0.00", "0.75", "1.50", "2.25", "3.00", "3.67"]
+
+    return [
+        _split(
+            f"2026-04-0{i + 1}",
+            f"Opponent {i + 1}",
+            {
+                "era": cumulative_era[i],
+                "earnedRuns": earned_runs[i],
+                "inningsPitched": innings[i],
+                "baseOnBalls": walks[i],
+                "hits": hits[i],
+                "strikeOuts": strikeouts[i],
+                "homeRuns": home_runs[i],
+                "hitBatsmen": hit_batsmen[i],
+            },
+        )
+        for i in range(6)
+    ]
+
+
+@pytest.fixture
+def batting_splits() -> list[dict[str, Any]]:
+    """Six games with per-game counting stats plus the cumulative rate
+    strings the API would report for these totals."""
+    at_bats = [4, 4, 3, 5, 4, 4]
+    hits = [1, 2, 0, 3, 1, 2]
+    walks = [1, 0, 1, 0, 1, 0]
+    hit_by_pitch = [0, 0, 0, 1, 0, 0]
+    sac_flies = [0, 1, 0, 0, 0, 0]
+    total_bases = [1, 3, 0, 7, 2, 3]
+    cumulative_avg = [".250", ".375", ".273", ".375", ".350", ".375"]
+    cumulative_obp = [".400", ".400", ".357", ".450", ".440", ".448"]
+    cumulative_slg = [".250", ".500", ".364", ".688", ".650", ".667"]
+    cumulative_ops = [".650", ".900", ".721", "1.138", "1.090", "1.115"]
+
+    return [
+        _split(
+            f"2026-04-0{i + 1}",
+            f"Opponent {i + 1}",
+            {
+                "avg": cumulative_avg[i],
+                "obp": cumulative_obp[i],
+                "slg": cumulative_slg[i],
+                "ops": cumulative_ops[i],
+                "atBats": at_bats[i],
+                "hits": hits[i],
+                "baseOnBalls": walks[i],
+                "hitByPitch": hit_by_pitch[i],
+                "sacFlies": sac_flies[i],
+                "totalBases": total_bases[i],
+            },
+        )
+        for i in range(6)
+    ]

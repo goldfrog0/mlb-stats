@@ -1,0 +1,79 @@
+"""Web backend tests via FastAPI's TestClient -- no server process, no
+network: the two API-facing functions are monkeypatched to serve
+fixture data, everything else (routing, validation, serialization,
+static files) runs for real."""
+
+import pytest
+from fastapi.testclient import TestClient
+
+import mlb_stats.web as web
+
+client = TestClient(web.app)
+
+
+@pytest.fixture
+def fake_api(monkeypatch, pitching_splits):
+    monkeypatch.setattr(web, "find_player", lambda name: (660271, f"Resolved {name}"))
+    monkeypatch.setattr(web, "get_game_log", lambda pid, season, group: pitching_splits)
+
+
+class TestStaticFrontend:
+    def test_index_served_at_root(self) -> None:
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "MLB Player" in resp.text
+
+
+class TestListStats:
+    def test_all_registered_stats_with_label_and_group(self) -> None:
+        resp = client.get("/api/stats")
+        assert resp.status_code == 200
+        stats = resp.json()
+        assert stats["era"] == {"label": "ERA", "group": "pitching"}
+        assert stats["ops"] == {"label": "OPS", "group": "batting"}
+
+
+class TestPlayerEndpoint:
+    def test_response_shape(self, fake_api) -> None:
+        resp = client.get("/api/player", params={"name": "Someone", "stat": "era"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["name"] == "Resolved Someone"
+        assert payload["label"] == "ERA"
+        assert len(payload["data"]) == 6
+        assert set(payload["data"][0]) == {"date", "opponent", "game", "cumulative", "rolling"}
+
+    def test_nan_rolling_values_serialize_as_null(self, fake_api) -> None:
+        # The first window-1 games have no rolling value; JSON must carry
+        # null there, not NaN (which is invalid JSON).
+        data = client.get("/api/player", params={"name": "X", "window": 5}).json()["data"]
+        assert [r["rolling"] for r in data[:4]] == [None] * 4
+        assert data[4]["rolling"] == pytest.approx(3.0)
+
+    def test_season_param_is_optional(self, fake_api) -> None:
+        # Omitting season falls back to the current year server-side.
+        resp = client.get("/api/player", params={"name": "Someone"})
+        assert resp.status_code == 200
+
+    def test_unknown_player_is_404_with_detail(self, monkeypatch) -> None:
+        def raise_not_found(name):
+            raise ValueError(f"No player found for '{name}'")
+
+        monkeypatch.setattr(web, "find_player", raise_not_found)
+        resp = client.get("/api/player", params={"name": "Zzz"})
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "No player found for 'Zzz'"
+
+
+class TestCompareEndpoint:
+    def test_both_players_resolved(self, fake_api) -> None:
+        resp = client.get("/api/compare", params={"player1": "A", "player2": "B", "stat": "era"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["player1"]["name"] == "Resolved A"
+        assert payload["player2"]["name"] == "Resolved B"
+        assert len(payload["player1"]["data"]) == 6
+
+    def test_missing_player2_is_a_validation_error(self, fake_api) -> None:
+        resp = client.get("/api/compare", params={"player1": "A"})
+        assert resp.status_code == 422  # FastAPI validation, not a crash
