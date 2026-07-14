@@ -5,6 +5,7 @@ only adds JSON serialization and HTTP routing on top of them.
 Run with: uvicorn mlb_stats.web:app --reload
 """
 
+import datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,13 @@ from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 app = FastAPI(title="MLB Stats")
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _current_season() -> int:
+    """Resolved per request rather than at import, since a long-running
+    server process would otherwise keep serving last year's default after
+    New Year (unlike the CLI, where a module-level constant is fine)."""
+    return datetime.date.today().year
 
 
 def _serialize(df: pd.DataFrame) -> list[dict[str, Any]]:
@@ -46,9 +54,9 @@ def list_stats() -> dict[str, dict[str, str]]:
 
 
 @app.get("/api/player")
-def player_stat(name: str, stat: str = "era", season: int = 2026, window: int = 5) -> dict[str, Any]:
+def player_stat(name: str, stat: str = "era", season: int | None = None, window: int = 5) -> dict[str, Any]:
     try:
-        df, full_name = _load_stat_dataframe(name, season, stat, window)
+        df, full_name = _load_stat_dataframe(name, season or _current_season(), stat, window)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -62,9 +70,10 @@ def player_stat(name: str, stat: str = "era", season: int = 2026, window: int = 
 
 @app.get("/api/compare")
 def compare_stat(
-    player1: str, player2: str, stat: str = "era", season: int = 2026, window: int = 5
+    player1: str, player2: str, stat: str = "era", season: int | None = None, window: int = 5
 ) -> dict[str, Any]:
     try:
+        season = season or _current_season()
         df1, name1 = _load_stat_dataframe(player1, season, stat, window)
         df2, name2 = _load_stat_dataframe(player2, season, stat, window)
     except ValueError as e:

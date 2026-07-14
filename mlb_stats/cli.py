@@ -16,6 +16,7 @@ from mlb_stats.plots import (
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 
 DEFAULT_WINDOW = 5
+CURRENT_YEAR = datetime.date.today().year
 AUTO_SAVE = "__auto__"  # sentinel for --save passed with no filename
 
 
@@ -73,7 +74,7 @@ def main() -> None:
                         help='Optional second player to compare against e.g. "Clayton Kershaw"')
     parser.add_argument("--stat", type=str, default="era", choices=sorted(STAT_CONFIGS),
                         help="Stat to plot (default: era)")
-    parser.add_argument("--season", type=int, default=2026, help="Season year (default: 2026)")
+    parser.add_argument("--season", type=int, default=CURRENT_YEAR, help=f"Season year (default: {CURRENT_YEAR})")
     parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
                         help=f"Rolling average window (default: {DEFAULT_WINDOW})")
     parser.add_argument("--save", type=str, nargs="?", const=AUTO_SAVE, default=None, metavar="FILE",

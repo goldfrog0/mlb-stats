@@ -346,4 +346,8 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
   }
 });
 
+// Default the season input to the current year (the backend also falls
+// back to the current season server-side when the param is omitted).
+document.getElementById("season").value = new Date().getFullYear();
+
 loadStats();
