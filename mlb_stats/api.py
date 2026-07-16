@@ -2,9 +2,19 @@ from typing import Any
 
 import requests
 
+from mlb_stats.cache import ttl_cache
+
 BASE_URL = "https://statsapi.mlb.com/api/v1"
 
+# Player identities are stable, so lookups can be cached for a long time.
+# Game logs gain a new entry whenever a game finishes, so they get a short
+# TTL: a just-completed game shows up within this window. Failed calls are
+# never cached (see ttl_cache).
+PLAYER_TTL_SECONDS = 24 * 60 * 60
+GAME_LOG_TTL_SECONDS = 15 * 60
 
+
+@ttl_cache(PLAYER_TTL_SECONDS)
 def find_player(name: str) -> tuple[int, str]:
     """Search for a player by name. Returns (player_id, full_name) or raises."""
     resp = requests.get(f"{BASE_URL}/people/search", params={"names": name})
@@ -20,6 +30,7 @@ def find_player(name: str) -> tuple[int, str]:
     return people[0]["id"], people[0]["fullName"]
 
 
+@ttl_cache(GAME_LOG_TTL_SECONDS)
 def get_game_log(player_id: int, season: int, group: str) -> list[dict[str, Any]]:
     """Fetch per-game stats for a player in a given season and stat group
     (e.g. "pitching" or "batting")."""

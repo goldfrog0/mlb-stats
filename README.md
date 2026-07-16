@@ -69,6 +69,15 @@ it directly on your network instead. Worker count defaults to
 `2 × CPU cores + 1`; override with `WEB_CONCURRENCY`. Note that
 gunicorn is Unix-only (Linux/macOS).
 
+### Caching
+
+MLB API responses are cached in-process (`mlb_stats/cache.py`): player
+lookups for 24 hours (IDs are stable), game logs for 15 minutes (so a
+just-finished game shows up within that window). Repeat plots — or
+tweaks like changing the rolling window, which reuse the same game
+log — skip the network entirely. Failed lookups are never cached. Each
+gunicorn worker keeps its own cache, so a fresh worker starts cold.
+
 ## Project layout
 
 ```
@@ -110,6 +119,7 @@ What lives where:
 | --- | --- |
 | `tests/test_plots.py` | The data pipeline: innings-pitched box-score parsing ("6.2" = 6⅔), rolling windows summing counts (not averaging rates), per-game values, FIP's weights/constant, OPS as a composite |
 | `tests/test_stats.py` | Stat-registry consistency, so a malformed new entry fails a test instead of crashing at runtime |
+| `tests/test_cache.py` | The TTL cache: expiry, eviction, errors never cached, and that the api layer really does hit the network only once per unique lookup |
 | `tests/test_cli.py` | The `mlb-stats` command end to end: argument parsing, chart files actually written, `--table` output, auto-generated filenames, exit codes on errors |
 | `tests/test_web.py` | The FastAPI endpoints via `TestClient` (no server needed): JSON shapes, NaN→null serialization, 404s, validation errors, the static frontend |
 
