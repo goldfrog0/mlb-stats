@@ -1,5 +1,7 @@
 # MLB Stats
 
+[![CI](https://github.com/goldfrog0/mlb-stats/actions/workflows/ci.yml/badge.svg)](https://github.com/goldfrog0/mlb-stats/actions/workflows/ci.yml)
+
 Look up an MLB player, pull their game-by-game stat log from the public
 [MLB Stats API](https://statsapi.mlb.com), and plot a chosen stat over
 time with a rolling average — for one player, or two players compared
@@ -130,6 +132,13 @@ pytest -v                  # list every test as it runs
 pytest tests/test_cli.py   # one file
 pytest -k rolling          # tests matching a keyword
 ```
+
+### CI
+
+[GitHub Actions](.github/workflows/ci.yml) runs ruff, mypy, and the
+full test suite on every push and pull request against `master`, on
+Python 3.11 (the floor — `NotRequired` in `stats.py` needs it) and
+3.13.
 
 When adding a stat or feature, the usual pattern is: extend the fixture
 data in `tests/conftest.py` if new fields are needed, then assert
