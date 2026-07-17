@@ -248,6 +248,3 @@ Possible future extensions:
   - Team standings comparison across all 30 teams
   - Team win % over a season (see the original notebook exploration
     for the Dodgers schedule-based version of this)
-  - Player-name autocomplete in the web UI (the search already exists
-    server-side via find_player(), this is mostly a frontend
-    debounced-fetch job)

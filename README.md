@@ -123,7 +123,7 @@ What lives where:
 | `tests/test_stats.py` | Stat-registry consistency, so a malformed new entry fails a test instead of crashing at runtime |
 | `tests/test_cache.py` | The TTL cache: expiry, eviction, errors never cached, and that the api layer really does hit the network only once per unique lookup |
 | `tests/test_cli.py` | The `mlb-stats` command end to end: argument parsing, chart files actually written, `--table` output, auto-generated filenames, exit codes on errors |
-| `tests/test_web.py` | The FastAPI endpoints via `TestClient` (no server needed): JSON shapes, NaN→null serialization, 404s, validation errors, the static frontend |
+| `tests/test_web.py` | The FastAPI endpoints via `TestClient` (no server needed): JSON shapes, NaN→null serialization, 404s, validation errors, player-search autocomplete, the static frontend |
 
 Useful variations:
 

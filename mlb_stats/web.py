@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from mlb_stats.api import find_player, get_game_log
+from mlb_stats.api import find_player, get_game_log, search_players
 from mlb_stats.plots import build_stat_dataframe, add_rolling_stat, compute_game_value
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 
@@ -45,6 +45,17 @@ def _load_stat_dataframe(player_name: str, season: int, stat_key: str, window: i
     df = add_rolling_stat(df, stat_key, window)
     df["game"] = compute_game_value(df, stat_key)
     return df, full_name
+
+
+@app.get("/api/search-players")
+def search_players_endpoint(q: str) -> list[dict[str, Any]]:
+    """Player-name suggestions for autocomplete. Short queries are
+    rejected server-side too (not just by the frontend's debounce/min-
+    length guard) since they'd otherwise return dozens of barely-relevant
+    matches for no benefit."""
+    if len(q.strip()) < 2:
+        return []
+    return search_players(q.strip())
 
 
 @app.get("/api/stats")

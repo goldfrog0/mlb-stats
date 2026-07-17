@@ -17,11 +17,15 @@
       <form id="controls">
         <div class="field">
           <label for="player1">Player</label>
-          <input id="player1" type="text" placeholder="Shohei Ohtani" required>
+          <input id="player1" type="text" placeholder="Shohei Ohtani" required
+                 list="player1-suggestions" autocomplete="off">
+          <datalist id="player1-suggestions"></datalist>
         </div>
         <div class="field">
           <label for="player2">Compare against <span class="hint">(optional)</span></label>
-          <input id="player2" type="text" placeholder="Paul Skenes">
+          <input id="player2" type="text" placeholder="Paul Skenes"
+                 list="player2-suggestions" autocomplete="off">
+          <datalist id="player2-suggestions"></datalist>
         </div>
         <div class="field">
           <label for="stat">Stat</label>

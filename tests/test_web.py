@@ -77,3 +77,26 @@ class TestCompareEndpoint:
     def test_missing_player2_is_a_validation_error(self, fake_api) -> None:
         resp = client.get("/api/compare", params={"player1": "A"})
         assert resp.status_code == 422  # FastAPI validation, not a crash
+
+
+class TestSearchPlayersEndpoint:
+    def test_returns_matches(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            web, "search_players",
+            lambda query: [{"id": 660271, "name": "Shohei Ohtani"}],
+        )
+        resp = client.get("/api/search-players", params={"q": "Sho"})
+        assert resp.status_code == 200
+        assert resp.json() == [{"id": 660271, "name": "Shohei Ohtani"}]
+
+    def test_short_query_returns_empty_without_calling_search(self, monkeypatch) -> None:
+        called = []
+        monkeypatch.setattr(web, "search_players", lambda query: called.append(query) or [])
+        resp = client.get("/api/search-players", params={"q": "S"})
+        assert resp.status_code == 200
+        assert resp.json() == []
+        assert called == []  # never reached search_players -- rejected before the network call
+
+    def test_missing_query_is_a_validation_error(self) -> None:
+        resp = client.get("/api/search-players")
+        assert resp.status_code == 422

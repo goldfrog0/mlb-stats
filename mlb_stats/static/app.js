@@ -346,6 +346,48 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
   }
 });
 
+function debounce(fn, delayMs) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delayMs);
+  };
+}
+
+// Populates a <datalist> from /api/search-players as the user types, so
+// the input field's native autocomplete dropdown suggests real player
+// names instead of the user having to guess exact spelling and find out
+// via a 404 on submit. Matches the server-side minimum length in web.py.
+const MIN_SEARCH_LENGTH = 2;
+
+async function updatePlayerSuggestions(inputId, datalistId) {
+  const query = document.getElementById(inputId).value.trim();
+  const datalist = document.getElementById(datalistId);
+
+  if (query.length < MIN_SEARCH_LENGTH) {
+    datalist.replaceChildren();
+    return;
+  }
+
+  const resp = await fetch(`/api/search-players?q=${encodeURIComponent(query)}`);
+  if (!resp.ok) return;
+  const players = await resp.json();
+
+  datalist.replaceChildren(...players.map((p) => {
+    const option = document.createElement("option");
+    option.value = p.name;
+    return option;
+  }));
+}
+
+function wireAutocomplete(inputId, datalistId) {
+  const debounced = debounce(() => updatePlayerSuggestions(inputId, datalistId), 250);
+  document.getElementById(inputId).addEventListener("input", debounced);
+}
+
+wireAutocomplete("player1", "player1-suggestions");
+wireAutocomplete("player2", "player2-suggestions");
+
 // Default the season input to the current year (the backend also falls
 // back to the current season server-side when the param is omitted).
 document.getElementById("season").value = new Date().getFullYear();

@@ -30,6 +30,20 @@ def find_player(name: str) -> tuple[int, str]:
     return people[0]["id"], people[0]["fullName"]
 
 
+@ttl_cache(PLAYER_TTL_SECONDS)
+def search_players(query: str, limit: int = 8) -> list[dict[str, Any]]:
+    """Search for players by partial name match, for autocomplete. Unlike
+    find_player, an empty result is a normal state (the user just hasn't
+    typed a matching name yet) -- returns [] rather than raising.
+    Filtered to active players only, since the app only has current-season
+    data and a retired/minor-league player would just be a dead end."""
+    resp = requests.get(f"{BASE_URL}/people/search", params={"names": query})
+    resp.raise_for_status()
+    people = resp.json().get("people", [])
+    active = [p for p in people if p.get("active")]
+    return [{"id": p["id"], "name": p["fullName"]} for p in active[:limit]]
+
+
 @ttl_cache(GAME_LOG_TTL_SECONDS)
 def get_game_log(player_id: int, season: int, group: str) -> list[dict[str, Any]]:
     """Fetch per-game stats for a player in a given season and stat group

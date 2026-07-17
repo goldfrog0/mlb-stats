@@ -126,9 +126,11 @@ class TestApiCaching:
     def clean_caches(self):
         api.find_player.cache_clear()
         api.get_game_log.cache_clear()
+        api.search_players.cache_clear()
         yield
         api.find_player.cache_clear()
         api.get_game_log.cache_clear()
+        api.search_players.cache_clear()
 
     def test_find_player_cached(self, monkeypatch) -> None:
         http_calls = []
@@ -167,3 +169,31 @@ class TestApiCaching:
             with pytest.raises(ValueError, match="No player found"):
                 api.find_player("Zzznotaplayer")
         assert len(http_calls) == 2  # retried both times, never cached
+
+    def test_search_players_cached_and_filtered_to_active(self, monkeypatch) -> None:
+        http_calls = []
+
+        def fake_get(url, params=None):
+            http_calls.append(url)
+            return FakeResponse({"people": [
+                {"id": 1, "fullName": "Active Player", "active": True},
+                {"id": 2, "fullName": "Retired Player", "active": False},
+            ]})
+
+        monkeypatch.setattr(api.requests, "get", fake_get)
+        result = api.search_players("Play")
+        assert result == [{"id": 1, "name": "Active Player"}]
+        api.search_players("Play")  # cached
+        assert len(http_calls) == 1
+
+    def test_search_players_respects_limit(self, monkeypatch) -> None:
+        def fake_get(url, params=None):
+            people = [{"id": i, "fullName": f"Player {i}", "active": True} for i in range(20)]
+            return FakeResponse({"people": people})
+
+        monkeypatch.setattr(api.requests, "get", fake_get)
+        assert len(api.search_players("Player", limit=3)) == 3
+
+    def test_search_players_empty_result_does_not_raise(self, monkeypatch) -> None:
+        monkeypatch.setattr(api.requests, "get", lambda url, params=None: FakeResponse({"people": []}))
+        assert api.search_players("Zzznotaplayer") == []
