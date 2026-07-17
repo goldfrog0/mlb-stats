@@ -105,3 +105,27 @@ class TestMain:
         with pytest.raises(SystemExit) as excinfo:
             cli.main()
         assert excinfo.value.code == 2  # argparse usage error
+
+    def test_team_win_pct_saves_chart(self, monkeypatch, tmp_path, team_schedule_games) -> None:
+        # A "team" group stat should route through find_team/get_team_schedule
+        # instead of find_player/get_game_log, transparently to argparse --
+        # same positional argument either way.
+        monkeypatch.setattr(cli, "find_team", lambda name: (119, "Los Angeles Dodgers"))
+        monkeypatch.setattr(cli, "get_team_schedule", lambda team_id, season: team_schedule_games)
+        out = tmp_path / "team.png"
+        monkeypatch.setattr("sys.argv", [
+            "mlb-stats", "Los Angeles Dodgers", "--stat", "win_pct", "--table", "--save", str(out),
+        ])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+
+    def test_unknown_team_exits_1_with_message(self, monkeypatch, capsys) -> None:
+        def raise_not_found(name):
+            raise ValueError(f"No team found for '{name}'")
+
+        monkeypatch.setattr(cli, "find_team", raise_not_found)
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Zzznotateam", "--stat", "win_pct"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 1
+        assert "No team found for 'Zzznotateam'" in capsys.readouterr().out

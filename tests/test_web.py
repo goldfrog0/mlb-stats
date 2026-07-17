@@ -31,6 +31,7 @@ class TestListStats:
         stats = resp.json()
         assert stats["era"] == {"label": "ERA", "group": "pitching"}
         assert stats["ops"] == {"label": "OPS", "group": "batting"}
+        assert stats["win_pct"] == {"label": "Win%", "group": "team"}
 
 
 class TestPlayerEndpoint:
@@ -63,6 +64,40 @@ class TestPlayerEndpoint:
         resp = client.get("/api/player", params={"name": "Zzz"})
         assert resp.status_code == 404
         assert resp.json()["detail"] == "No player found for 'Zzz'"
+
+
+class TestTeamStat:
+    @pytest.fixture
+    def fake_team_api(self, monkeypatch, team_schedule_games):
+        monkeypatch.setattr(web, "find_team", lambda name: (119, f"Resolved {name}"))
+        monkeypatch.setattr(web, "get_team_schedule", lambda team_id, season: team_schedule_games)
+
+    def test_player_endpoint_routes_team_stat_through_team_lookup(self, fake_team_api) -> None:
+        resp = client.get("/api/player", params={"name": "Dodgers", "stat": "win_pct"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["name"] == "Resolved Dodgers"
+        assert payload["label"] == "Win%"
+        assert len(payload["data"]) == 6  # future game excluded
+
+    def test_unknown_team_is_404(self, monkeypatch) -> None:
+        def raise_not_found(name):
+            raise ValueError(f"No team found for '{name}'")
+
+        monkeypatch.setattr(web, "find_team", raise_not_found)
+        resp = client.get("/api/player", params={"name": "Zzz", "stat": "win_pct"})
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "No team found for 'Zzz'"
+
+    def test_compare_two_teams(self, fake_team_api) -> None:
+        resp = client.get(
+            "/api/compare",
+            params={"player1": "Dodgers", "player2": "Giants", "stat": "win_pct"},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert len(payload["player1"]["data"]) == 6
+        assert len(payload["player2"]["data"]) == 6
 
 
 class TestCompareEndpoint:

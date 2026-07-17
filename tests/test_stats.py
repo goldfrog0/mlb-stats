@@ -10,7 +10,7 @@ from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 def test_every_config_is_complete() -> None:
     for key, config in STAT_CONFIGS.items():
         assert config["label"], key
-        assert config["group"] in ("pitching", "batting"), key
+        assert config["group"] in ("pitching", "batting", "team"), key
         assert "cumulative_field" in config, key
 
         if "composite_of" in config:

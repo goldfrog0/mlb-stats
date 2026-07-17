@@ -13,8 +13,13 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from mlb_stats.api import find_player, get_game_log, search_players
-from mlb_stats.plots import build_stat_dataframe, add_rolling_stat, compute_game_value
+from mlb_stats.api import find_player, find_team, get_game_log, get_team_schedule, search_players
+from mlb_stats.plots import (
+    build_stat_dataframe,
+    build_team_win_dataframe,
+    add_rolling_stat,
+    compute_game_value,
+)
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 
 app = FastAPI(title="MLB Stats")
@@ -37,11 +42,16 @@ def _serialize(df: pd.DataFrame) -> list[dict[str, Any]]:
     return out.where(pd.notna(out), None).to_dict(orient="records")
 
 
-def _load_stat_dataframe(player_name: str, season: int, stat_key: str, window: int) -> tuple[pd.DataFrame, str]:
+def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> tuple[pd.DataFrame, str]:
     config = get_stat_config(stat_key)
-    player_id, full_name = find_player(player_name)
-    splits = get_game_log(player_id, season, config["group"])
-    df = build_stat_dataframe(splits, stat_key)
+    if config["group"] == "team":
+        team_id, full_name = find_team(name)
+        games = get_team_schedule(team_id, season)
+        df = build_team_win_dataframe(games, team_id)
+    else:
+        player_id, full_name = find_player(name)
+        splits = get_game_log(player_id, season, config["group"])
+        df = build_stat_dataframe(splits, stat_key)
     df = add_rolling_stat(df, stat_key, window)
     df["game"] = compute_game_value(df, stat_key)
     return df, full_name

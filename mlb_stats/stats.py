@@ -116,6 +116,20 @@ STAT_CONFIGS: dict[str, StatConfig] = {
         "cumulative_field": "ops",
         "composite_of": ["obp", "slg"],
     },
+    "win_pct": {
+        "label": "Win%",
+        "group": "team",
+        # Unlike every other entry here, the "team" group doesn't go
+        # through build_stat_dataframe (a team schedule is shaped nothing
+        # like a player's game log), so this field isn't actually
+        # consulted -- build_team_win_dataframe() sets the cumulative
+        # column itself, computed rather than trusting the API's
+        # pre-rounded leagueRecord.pct string.
+        "cumulative_field": None,
+        "numerator_fields": {"win": 1},
+        "denominator_fields": ["gamesPlayed"],
+        "multiplier": 1,
+    },
 }
 
 

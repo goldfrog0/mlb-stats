@@ -4,10 +4,11 @@ import re
 
 import pandas as pd
 
-from mlb_stats.api import find_player, get_game_log
+from mlb_stats.api import find_player, find_team, get_game_log, get_team_schedule
 from mlb_stats.plots import (
     COMPARISON_LAYOUTS,
     build_stat_dataframe,
+    build_team_win_dataframe,
     add_rolling_stat,
     format_stat_table,
     plot_stat,
@@ -20,13 +21,19 @@ CURRENT_YEAR = datetime.date.today().year
 AUTO_SAVE = "__auto__"  # sentinel for --save passed with no filename
 
 
-def _load_stat_dataframe(player_name: str, season: int, stat_key: str, window: int) -> tuple[pd.DataFrame, str]:
-    """Look up a player, pull their game log for stat_key, and return the
-    rolling-stat DataFrame alongside their resolved full name."""
+def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> tuple[pd.DataFrame, str]:
+    """Look up a player or team, pull their game log/schedule for
+    stat_key, and return the rolling-stat DataFrame alongside their
+    resolved full name."""
     config = get_stat_config(stat_key)
-    player_id, full_name = find_player(player_name)
-    splits = get_game_log(player_id, season, config["group"])
-    df = build_stat_dataframe(splits, stat_key)
+    if config["group"] == "team":
+        team_id, full_name = find_team(name)
+        games = get_team_schedule(team_id, season)
+        df = build_team_win_dataframe(games, team_id)
+    else:
+        player_id, full_name = find_player(name)
+        splits = get_game_log(player_id, season, config["group"])
+        df = build_stat_dataframe(splits, stat_key)
     df = add_rolling_stat(df, stat_key, window)
     return df, full_name
 
@@ -69,9 +76,11 @@ def main() -> None:
         prog="mlb-stats",
         description="MLB player stat visualizer"
     )
-    parser.add_argument("player", type=str, help='Player name e.g. "Shohei Ohtani"')
+    parser.add_argument("player", type=str,
+                        help='Player name, e.g. "Shohei Ohtani" -- or a team name for team stats '
+                             'like win_pct, e.g. "Los Angeles Dodgers"')
     parser.add_argument("player2", type=str, nargs="?", default=None,
-                        help='Optional second player to compare against e.g. "Clayton Kershaw"')
+                        help="Optional second player or team to compare against")
     parser.add_argument("--stat", type=str, default="era", choices=sorted(STAT_CONFIGS),
                         help="Stat to plot (default: era)")
     parser.add_argument("--season", type=int, default=CURRENT_YEAR, help=f"Season year (default: {CURRENT_YEAR})")

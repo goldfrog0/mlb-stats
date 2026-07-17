@@ -59,3 +59,50 @@ def get_game_log(player_id: int, season: int, group: str) -> list[dict[str, Any]
         raise ValueError(f"No {group} data found for player ID {player_id} in {season}")
 
     return splits
+
+
+@ttl_cache(PLAYER_TTL_SECONDS)
+def _all_teams() -> list[dict[str, Any]]:
+    resp = requests.get(f"{BASE_URL}/teams", params={"sportId": 1})
+    resp.raise_for_status()
+    return resp.json().get("teams", [])
+
+
+def find_team(name: str) -> tuple[int, str]:
+    """Search for a team by (partial, case-insensitive) name, e.g. "dodgers"
+    or "los angeles". Returns (team_id, full_name) or raises. The /teams
+    endpoint has no server-side search -- there are only 30 teams, so this
+    fetches the full list (cached) and matches client-side against the
+    full name, club name, city, and abbreviation."""
+    query = name.strip().lower()
+    matches = [
+        t for t in _all_teams()
+        if query in t["name"].lower()
+        or query in t.get("teamName", "").lower()
+        or query in t.get("locationName", "").lower()
+        or query == t.get("abbreviation", "").lower()
+    ]
+
+    if not matches:
+        raise ValueError(f"No team found for '{name}'")
+
+    if len(matches) > 1:
+        print(f"Multiple matches, using: {matches[0]['name']}")
+
+    return matches[0]["id"], matches[0]["name"]
+
+
+@ttl_cache(GAME_LOG_TTL_SECONDS)
+def get_team_schedule(team_id: int, season: int) -> list[dict[str, Any]]:
+    """Fetch a team's regular-season schedule/results for a season, as a
+    flat list of games (flattened from the API's date-grouped shape)."""
+    params: dict[str, str | int] = {"sportId": 1, "teamId": team_id, "season": season, "gameType": "R"}
+    resp = requests.get(f"{BASE_URL}/schedule", params=params)
+    resp.raise_for_status()
+    data = resp.json()
+
+    games = [game for date_entry in data.get("dates", []) for game in date_entry.get("games", [])]
+    if not games:
+        raise ValueError(f"No schedule found for team ID {team_id} in {season}")
+
+    return games

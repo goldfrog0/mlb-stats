@@ -89,6 +89,50 @@ def build_stat_dataframe(splits: list[dict[str, Any]], stat_key: str) -> pd.Data
     return df
 
 
+def build_team_win_dataframe(games: list[dict[str, Any]], team_id: int) -> pd.DataFrame:
+    """Flatten a team's schedule into the same shape build_stat_dataframe
+    produces (date, opponent, cumulative, plus the raw numerator/
+    denominator fields the "win_pct" config rolls up), so
+    add_rolling_stat/compute_game_value/format_stat_table/the plotting
+    functions all work unchanged for team win percentage as for any
+    player stat -- a team schedule just needs its own flattening since
+    it's shaped nothing like a player's game log.
+
+    Only completed ("Final") games are included; future/scheduled games
+    have no result yet. Ties (neither side isWinner) count as a
+    non-win -- essentially moot in practice since modern MLB doesn't
+    end games in ties under normal circumstances.
+    """
+    rows = []
+    for game in games:
+        if game["status"]["abstractGameState"] != "Final":
+            continue
+
+        home, away = game["teams"]["home"], game["teams"]["away"]
+        this_side, other_side = (home, away) if home["team"]["id"] == team_id else (away, home)
+
+        rows.append({
+            "date": game["officialDate"],
+            "opponent": other_side["team"]["name"],
+            "win": 1 if this_side.get("isWinner") else 0,
+            "gamesPlayed": 1,
+        })
+
+    if not rows:
+        raise ValueError(f"No completed games found for team ID {team_id}")
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").reset_index(drop=True)
+
+    # Computed rather than trusting the API's leagueRecord.pct string,
+    # which is pre-rounded to 3 decimals (same reasoning as FIP's
+    # self-computed cumulative).
+    df["cumulative"] = df["win"].cumsum() / df["gamesPlayed"].cumsum()
+
+    return df
+
+
 def _rolling_value_for_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.Series:
     config = get_stat_config(stat_key)
     if "composite_of" in config:
@@ -180,13 +224,24 @@ def plot_stat(
     _finish_plot(save_path)
 
 
+def _rolling_by_date(df: pd.DataFrame) -> pd.Series:
+    """A "rolling" series indexed by date, collapsed to the last game on
+    any date with more than one (doubleheaders for a team, or -- in
+    principle -- a player who appeared twice in one day). reindex()
+    requires a unique index, and df is already sorted by date, so
+    keeping the last occurrence per date is both correct (it reflects
+    the rolling value as of the end of that date) and required."""
+    s = df.set_index("date")["rolling"]
+    return s[~s.index.duplicated(keep="last")]
+
+
 def _reindexed_rolling_diff(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     """Compute player1's rolling value minus player2's, reindexed onto the
     union of both players' game dates. A player's rolling value holds
     (forward-fill) between their games until their next one, since the
     two players are rarely on the same game schedule."""
-    s1 = df1.set_index("date")["rolling"]
-    s2 = df2.set_index("date")["rolling"]
+    s1 = _rolling_by_date(df1)
+    s2 = _rolling_by_date(df2)
     all_dates = s1.index.union(s2.index).sort_values()
     diff = s1.reindex(all_dates).ffill() - s2.reindex(all_dates).ffill()
     return pd.DataFrame({"date": all_dates, "diff": diff.to_numpy()})

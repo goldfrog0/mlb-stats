@@ -3,10 +3,12 @@ rolling windows, per-game values, and the two special-case stats
 (FIP's weights/constant, OPS's composite sum). All expected numbers are
 computed by hand from the fixture values in conftest.py."""
 
+import pandas as pd
 import pytest
 
 from mlb_stats.plots import (
     _parse_innings_pitched,
+    _reindexed_rolling_diff,
     _to_float,
     add_rolling_stat,
     build_stat_dataframe,
@@ -104,3 +106,36 @@ class TestFormatStatTable:
         df = add_rolling_stat(build_stat_dataframe(pitching_splits, "era"), "era", window=5)
         first_row = format_stat_table(df, "era").splitlines()[1]
         assert "NaN" in first_row
+
+
+class TestReindexedRollingDiff:
+    """MLB schedules include doubleheaders -- two games on the same
+    calendar date -- which produces duplicate "date" values. That broke
+    pandas' reindex() (it requires a unique index) the first time this
+    was exercised for real, comparing two teams where one had played a
+    doubleheader. A player who appeared twice in one day would hit the
+    same bug, so this is tested at the shared function, not just for
+    teams."""
+
+    def _df(self, dates: list[str], rolling: list[float]) -> pd.DataFrame:
+        return pd.DataFrame({"date": pd.to_datetime(dates), "rolling": rolling})
+
+    def test_duplicate_date_does_not_raise(self) -> None:
+        df1 = self._df(["2026-04-01", "2026-04-02", "2026-04-02"], [1.0, 2.0, 3.0])
+        df2 = self._df(["2026-04-01", "2026-04-02"], [0.5, 0.5])
+        _reindexed_rolling_diff(df1, df2)  # must not raise
+
+    def test_duplicate_date_uses_the_later_game(self) -> None:
+        # Second game on 04-02 (rolling=3.0) should win over the first
+        # (rolling=2.0), since it reflects the later, more complete state.
+        df1 = self._df(["2026-04-01", "2026-04-02", "2026-04-02"], [1.0, 2.0, 3.0])
+        df2 = self._df(["2026-04-01", "2026-04-02"], [0.5, 0.5])
+        result = _reindexed_rolling_diff(df1, df2)
+        row = result[result["date"] == pd.Timestamp("2026-04-02")]
+        assert row["diff"].iloc[0] == pytest.approx(3.0 - 0.5)
+
+    def test_no_duplicates_still_works(self) -> None:
+        df1 = self._df(["2026-04-01", "2026-04-02"], [1.0, 2.0])
+        df2 = self._df(["2026-04-01", "2026-04-02"], [0.5, 1.5])
+        result = _reindexed_rolling_diff(df1, df2)
+        assert list(result["diff"]) == pytest.approx([0.5, 0.5])

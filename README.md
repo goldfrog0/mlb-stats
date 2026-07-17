@@ -2,10 +2,11 @@
 
 [![CI](https://github.com/goldfrog0/mlb-stats/actions/workflows/ci.yml/badge.svg)](https://github.com/goldfrog0/mlb-stats/actions/workflows/ci.yml)
 
-Look up an MLB player, pull their game-by-game stat log from the public
-[MLB Stats API](https://statsapi.mlb.com), and plot a chosen stat over
-time with a rolling average — for one player, or two players compared
-side by side. Available as both a command-line tool and a browser UI.
+Look up an MLB player or team, pull their game-by-game stat log or
+schedule from the public [MLB Stats API](https://statsapi.mlb.com),
+and plot a chosen stat over time with a rolling average — for one
+player/team, or two compared side by side. Available as both a
+command-line tool and a browser UI.
 
 ## Setup
 
@@ -33,6 +34,7 @@ immediately without reinstalling.
 ```bash
 mlb-stats "Shohei Ohtani"
 mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era --layout stacked --diff
+mlb-stats "Los Angeles Dodgers" --stat win_pct
 ```
 
 See [HOW_TO_USE.txt](HOW_TO_USE.txt) for the full list of stats,
@@ -85,7 +87,7 @@ gunicorn worker keeps its own cache, so a fresh worker starts cold.
 ```
 mlb_stats/
 ├── stats.py    # Registry of supported stats (add a new stat here)
-├── api.py      # MLB Stats API calls
+├── api.py      # MLB Stats API calls (players and teams)
 ├── plots.py    # Data shaping + matplotlib charting (used by the CLI)
 ├── cli.py      # CLI entry point (mlb-stats command)
 ├── web.py      # FastAPI backend (JSON endpoints for the browser UI)
@@ -121,6 +123,7 @@ What lives where:
 | --- | --- |
 | `tests/test_plots.py` | The data pipeline: innings-pitched box-score parsing ("6.2" = 6⅔), rolling windows summing counts (not averaging rates), per-game values, FIP's weights/constant, OPS as a composite |
 | `tests/test_stats.py` | Stat-registry consistency, so a malformed new entry fails a test instead of crashing at runtime |
+| `tests/test_teams.py` | Team lookup (partial/city/abbreviation matching), schedule fetching, and flattening a schedule into win/loss + cumulative win% -- including the doubleheader (duplicate-date) regression |
 | `tests/test_cache.py` | The TTL cache: expiry, eviction, errors never cached, and that the api layer really does hit the network only once per unique lookup |
 | `tests/test_cli.py` | The `mlb-stats` command end to end: argument parsing, chart files actually written, `--table` output, auto-generated filenames, exit codes on errors |
 | `tests/test_web.py` | The FastAPI endpoints via `TestClient` (no server needed): JSON shapes, NaN→null serialization, 404s, validation errors, player-search autocomplete, the static frontend |

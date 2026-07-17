@@ -57,6 +57,45 @@ def pitching_splits() -> list[dict[str, Any]]:
     ]
 
 
+TEAM_ID, TEAM_NAME = 119, "Los Angeles Dodgers"
+OPPONENT_ID, OPPONENT_NAME = 137, "San Francisco Giants"
+
+
+def _team_game(date: str, home_win: bool, team_is_home: bool, final: bool = True) -> dict[str, Any]:
+    home_id, home_name = (TEAM_ID, TEAM_NAME) if team_is_home else (OPPONENT_ID, OPPONENT_NAME)
+    away_id, away_name = (OPPONENT_ID, OPPONENT_NAME) if team_is_home else (TEAM_ID, TEAM_NAME)
+
+    teams: dict[str, Any] = {
+        "home": {"team": {"id": home_id, "name": home_name}},
+        "away": {"team": {"id": away_id, "name": away_name}},
+    }
+    if final:
+        teams["home"]["isWinner"] = home_win
+        teams["away"]["isWinner"] = not home_win
+
+    return {
+        "officialDate": date,
+        "status": {"abstractGameState": "Final" if final else "Preview"},
+        "teams": teams,
+    }
+
+
+@pytest.fixture
+def team_schedule_games() -> list[dict[str, Any]]:
+    """Six completed games for TEAM_ID (mixed home/away), producing the
+    sequence W L W W L L (3-3), plus one future/scheduled game that
+    build_team_win_dataframe should filter out."""
+    return [
+        _team_game("2026-04-01", home_win=True, team_is_home=True),    # W (home team won, we're home)
+        _team_game("2026-04-02", home_win=True, team_is_home=False),   # L (home team won, we're away)
+        _team_game("2026-04-03", home_win=False, team_is_home=False),  # W (home team lost, we're away)
+        _team_game("2026-04-04", home_win=True, team_is_home=True),    # W (home team won, we're home)
+        _team_game("2026-04-05", home_win=False, team_is_home=True),   # L (home team lost, we're home)
+        _team_game("2026-04-06", home_win=False, team_is_home=True),   # L (home team lost, we're home)
+        _team_game("2026-04-07", home_win=True, team_is_home=True, final=False),  # future, excluded
+    ]
+
+
 @pytest.fixture
 def batting_splits() -> list[dict[str, Any]]:
     """Six games with per-game counting stats plus the cumulative rate

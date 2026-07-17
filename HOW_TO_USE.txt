@@ -1,10 +1,10 @@
 MLB Stats CLI — How to Use
 ===========================
 
-A local command-line tool that looks up an MLB player, pulls their
-game-by-game stat log for a season, and plots a chosen stat over time
-with a rolling average — for one player, or two players compared
-side by side.
+A local command-line tool that looks up an MLB player or team, pulls
+their game-by-game stat log or schedule for a season, and plots a
+chosen stat over time with a rolling average — for one player/team, or
+two compared side by side.
 
 
 SETUP
@@ -50,14 +50,22 @@ Batting:
   avg    Batting average
   obp    On-base percentage
   slg    Slugging percentage
+  ops    On-base Plus Slugging (obp + slg)
+
+Team:
+  win_pct  Win percentage over the season
 
      mlb-stats "Paul Skenes" --stat k9
      mlb-stats "Freddie Freeman" --stat obp
+     mlb-stats "Los Angeles Dodgers" --stat win_pct
 
-The tool automatically requests the right stat group (pitching vs
-batting) from the API based on which --stat you pick.
+The tool automatically requests the right stat group (pitching,
+batting, or team) from the API based on which --stat you pick -- and
+for a team stat, the player/player2 arguments mean team names instead
+(matched the same partial/case-insensitive way, e.g. "dodgers" or "LA
+Dodgers" both work).
 
-A note on FIP: unlike the other stats here, the MLB Stats API doesn't
+A note on FIP: unlike most other stats here, the MLB Stats API doesn't
 return a season-cumulative FIP value, so the "season cumulative" line
 is computed locally from cumulative HR/BB/HBP/K/IP. Also, FIP's
 constant term (which puts it on the same scale as ERA) is normally
@@ -66,20 +74,24 @@ uses a fixed, commonly-cited approximation (3.10) rather than the
 exact value for whichever season you're looking at, so FIP numbers
 will be close but not perfectly official.
 
+A note on win_pct: also computed locally rather than from the API's
+own (pre-rounded) season record, for full precision.
 
-COMPARING TWO PLAYERS
-----------------------
 
-Pass a second player name to overlay both players' rolling averages
-on one chart instead of plotting a single player:
+COMPARING TWO PLAYERS (OR TEAMS)
+----------------------------------
+
+Pass a second player (or team, for --stat win_pct) name to overlay
+both rolling averages on one chart instead of plotting a single one:
 
      mlb-stats "Shohei Ohtani" "Paul Skenes" --stat era
+     mlb-stats "Los Angeles Dodgers" "San Francisco Giants" --stat win_pct
 
-Both players must have data for the same --stat (and therefore the
-same stat group) and --season, or you'll get a "No ... data found"
-error for whichever one doesn't. By default the comparison chart
-shows only the rolling lines (no cumulative lines) to keep it
-readable — see "COMPARISON DISPLAY OPTIONS" below to change this.
+Both must have data for the same --stat (and therefore the same stat
+group) and --season, or you'll get a "No ... data found" error for
+whichever one doesn't. By default the comparison chart shows only the
+rolling lines (no cumulative lines) to keep it readable — see
+"COMPARISON DISPLAY OPTIONS" below to change this.
 
 
 COMPARISON DISPLAY OPTIONS
@@ -201,16 +213,25 @@ TROUBLESHOOTING
      Check the spelling of the name. The lookup uses MLB's player
      search API, so it needs to reasonably match a full name.
 
+"No team found for '...'"
+     Same idea, for --stat win_pct: check the spelling. Partial
+     matches work (e.g. "dodgers", "LA"), but very short/ambiguous
+     queries may match the wrong team -- see "Multiple matches" below.
+
 "No {pitching,batting} data found for player ID ... in ..."
      The player has no game log for that stat's group and season
      (e.g. a position player for a pitching stat, or a season where
      they were injured/didn't appear/hadn't debuted). Try a different
      --stat or --season.
 
+"No completed games found for team ID ..."
+     The team hasn't played any games yet this season (or the season
+     hasn't started) -- try a different --season.
+
 "Multiple matches, using: ..."
-     Just a heads up — the name search found more than one player and
-     picked the first match. Use a more specific name if it picked
-     the wrong person.
+     Just a heads up — the name (or team) search found more than one
+     match and picked the first one. Use a more specific name if it
+     picked the wrong one.
 
 "FigureCanvasAgg is non-interactive, and thus cannot be shown"
      Harmless if you used --save. If you want an actual display
@@ -228,8 +249,13 @@ mlb_stats/stats.py   Registry of supported stats (STAT_CONFIGS). Each
                       to sum for a correct rolling calculation.
                       Add a new stat here — nothing else needs to
                       change to support it.
-mlb_stats/api.py      API calls: find_player(), get_game_log()
+mlb_stats/api.py      API calls: find_player(), get_game_log(),
+                      find_team(), get_team_schedule()
 mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
+                      build_team_win_dataframe() (flattens a team
+                      schedule into the same shape build_stat_dataframe
+                      produces, so everything downstream is unaware
+                      whether it's looking at a player or a team),
                       add_rolling_stat(), format_stat_table(),
                       plot_stat(), plot_stat_comparison()
                       (COMPARISON_LAYOUTS lists the valid --layout
@@ -245,6 +271,6 @@ WHAT'S NEXT
 
 Possible future extensions:
 
-  - Team standings comparison across all 30 teams
-  - Team win % over a season (see the original notebook exploration
-    for the Dodgers schedule-based version of this)
+  - Team standings comparison across all 30 teams (division/wild-card
+    standings, not a per-game time series like everything else in this
+    app -- likely a different chart type, e.g. a bar chart)
