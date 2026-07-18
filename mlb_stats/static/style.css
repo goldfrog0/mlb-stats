@@ -58,6 +58,14 @@ body {
   gap: 0.9rem;
 }
 
+/* The display: flex above would otherwise override the browser's own
+   [hidden] { display: none } (ID selector wins over the UA stylesheet),
+   leaving both field groups visible at once regardless of mode. */
+#statFields[hidden],
+#standingsFields[hidden] {
+  display: none;
+}
+
 .mode-toggle {
   display: flex;
   gap: 0.4rem;
