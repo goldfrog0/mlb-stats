@@ -130,3 +130,27 @@ def batting_splits() -> list[dict[str, Any]]:
         )
         for i in range(6)
     ]
+
+
+@pytest.fixture
+def division_team_records() -> list[dict[str, Any]]:
+    """Four teams' standings records, in the shape /standings returns
+    them (already ranked best-to-worst, matching real AL East data used
+    to verify this feature against the live API)."""
+    teams = [
+        ("Rays", 1, 56, 38, ".596", "-", "L1"),
+        ("Yankees", 2, 54, 42, ".563", "3.0", "W4"),
+        ("Red Sox", 3, 46, 48, ".489", "10.0", "W9"),
+        ("Blue Jays", 4, 45, 51, ".469", "12.0", "L2"),
+    ]
+    return [
+        {
+            "team": {"id": 100 + rank, "name": name},
+            "divisionRank": str(rank),
+            "divisionGamesBack": gb,
+            "gamesBack": gb,
+            "leagueRecord": {"wins": wins, "losses": losses, "ties": 0, "pct": pct},
+            "streak": {"streakCode": streak},
+        }
+        for name, rank, wins, losses, pct, gb, streak in teams
+    ]

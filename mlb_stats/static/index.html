@@ -15,50 +15,78 @@
       <h1>MLB Player<br>Stat Viewer</h1>
 
       <form id="controls">
-        <div class="field">
-          <label for="player1">Player</label>
-          <input id="player1" type="text" placeholder="Shohei Ohtani" required
-                 list="player1-suggestions" autocomplete="off">
-          <datalist id="player1-suggestions"></datalist>
-        </div>
-        <div class="field">
-          <label for="player2">Compare against <span class="hint">(optional)</span></label>
-          <input id="player2" type="text" placeholder="Paul Skenes"
-                 list="player2-suggestions" autocomplete="off">
-          <datalist id="player2-suggestions"></datalist>
-        </div>
-        <div class="field">
-          <label for="stat">Stat</label>
-          <select id="stat"></select>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="season">Season</label>
-            <input id="season" type="number">
-          </div>
-          <div class="field">
-            <label for="window">Rolling window</label>
-            <input id="window" type="number" value="5" min="1">
-          </div>
-        </div>
-        <div class="field checkbox">
-          <label><input id="showCumulative" type="checkbox"> Show cumulative line</label>
-        </div>
-        <div class="field checkbox">
-          <label><input id="showTable" type="checkbox"> Show data table</label>
+        <div class="mode-toggle">
+          <button type="button" class="mode-btn active" data-mode="stats">Player / Team</button>
+          <button type="button" class="mode-btn" data-mode="standings">Standings</button>
         </div>
 
-        <div class="section-label">Comparison options</div>
-        <div class="field compare-only">
-          <label for="layout">Layout</label>
-          <select id="layout">
-            <option value="overlay" selected>Overlay</option>
-            <option value="stacked">Stacked</option>
-            <option value="side-by-side">Side by side</option>
-          </select>
+        <div id="statFields">
+          <div class="field">
+            <label for="player1">Player</label>
+            <input id="player1" type="text" placeholder="Shohei Ohtani" required
+                   list="player1-suggestions" autocomplete="off">
+            <datalist id="player1-suggestions"></datalist>
+          </div>
+          <div class="field">
+            <label for="player2">Compare against <span class="hint">(optional)</span></label>
+            <input id="player2" type="text" placeholder="Paul Skenes"
+                   list="player2-suggestions" autocomplete="off">
+            <datalist id="player2-suggestions"></datalist>
+          </div>
+          <div class="field">
+            <label for="stat">Stat</label>
+            <select id="stat"></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="season">Season</label>
+              <input id="season" type="number">
+            </div>
+            <div class="field">
+              <label for="window">Rolling window</label>
+              <input id="window" type="number" value="5" min="1">
+            </div>
+          </div>
+          <div class="field checkbox">
+            <label><input id="showCumulative" type="checkbox"> Show cumulative line</label>
+          </div>
+          <div class="field checkbox">
+            <label><input id="showTable" type="checkbox"> Show data table</label>
+          </div>
+
+          <div class="section-label">Comparison options</div>
+          <div class="field compare-only">
+            <label for="layout">Layout</label>
+            <select id="layout">
+              <option value="overlay" selected>Overlay</option>
+              <option value="stacked">Stacked</option>
+              <option value="side-by-side">Side by side</option>
+            </select>
+          </div>
+          <div class="field checkbox compare-only">
+            <label><input id="showDiff" type="checkbox"> Show diff panel</label>
+          </div>
         </div>
-        <div class="field checkbox compare-only">
-          <label><input id="showDiff" type="checkbox"> Show diff panel</label>
+
+        <div id="standingsFields" hidden>
+          <div class="field">
+            <label for="division">Division</label>
+            <select id="division">
+              <option>American League East</option>
+              <option>American League Central</option>
+              <option>American League West</option>
+              <option>National League East</option>
+              <option>National League Central</option>
+              <option>National League West</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="standingsSeason">Season</label>
+            <input id="standingsSeason" type="number">
+          </div>
+          <div class="field checkbox">
+            <label><input id="showStandingsTable" type="checkbox" checked> Show data table</label>
+          </div>
         </div>
 
         <button type="submit">Plot</button>

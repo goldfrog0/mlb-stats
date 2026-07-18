@@ -129,3 +129,31 @@ class TestMain:
             cli.main()
         assert excinfo.value.code == 1
         assert "No team found for 'Zzznotateam'" in capsys.readouterr().out
+
+    def test_standings_saves_chart_and_prints_table(self, monkeypatch, tmp_path, division_team_records, capsys) -> None:
+        monkeypatch.setattr(cli, "find_division", lambda name: (201, "American League East"))
+        monkeypatch.setattr(cli, "get_division_standings", lambda division_id, season: division_team_records)
+        out = tmp_path / "standings.png"
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "--standings", "AL East", "--table", "--save", str(out)])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+        printed = capsys.readouterr().out
+        assert "American League East" in printed
+        assert "Rays" in printed
+
+    def test_no_player_and_no_standings_is_a_usage_error(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.argv", ["mlb-stats"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 2
+
+    def test_unknown_division_exits_1_with_message(self, monkeypatch, capsys) -> None:
+        def raise_not_found(name):
+            raise ValueError(f"No division found for '{name}'")
+
+        monkeypatch.setattr(cli, "find_division", raise_not_found)
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "--standings", "Zzz"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 1
+        assert "No division found for 'Zzz'" in capsys.readouterr().out

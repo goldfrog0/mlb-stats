@@ -197,6 +197,28 @@ OPTIONS
      gap you'll see at the start of the rolling line on the chart.
 
 
+TEAM STANDINGS (--standings)
+------------------------------
+
+Instead of a per-game time series for a single player/team, show a
+whole division's current standings as a horizontal bar chart (win
+percentage, longest bar on top) and/or a table:
+
+     mlb-stats --standings "AL East"
+     mlb-stats --standings "National League West" --table
+     mlb-stats --standings "NL Central" --season 2024 --save
+
+No player argument is needed (or used) in this mode. "AL"/"NL" are
+expanded to "American League"/"National League" automatically, and
+matching is partial/case-insensitive like team names elsewhere, so
+"al east", "AL East", and "American League East" all work. --table,
+--save, and --season all behave the same as in single-player mode;
+--window, --layout, --show-cumulative, and --diff don't apply here
+since there's no rolling time series.
+
+       mlb-stats --standings "AL East" --table --save east.png
+
+
 COMBINING OPTIONS
 -----------------
 
@@ -228,6 +250,10 @@ TROUBLESHOOTING
      The team hasn't played any games yet this season (or the season
      hasn't started) -- try a different --season.
 
+"No division found for '...'"
+     Check the spelling, e.g. "AL East", "NL Central". See "TEAM
+     STANDINGS" above for the alias rules.
+
 "Multiple matches, using: ..."
      Just a heads up — the name (or team) search found more than one
      match and picked the first one. Use a more specific name if it
@@ -250,7 +276,8 @@ mlb_stats/stats.py   Registry of supported stats (STAT_CONFIGS). Each
                       Add a new stat here — nothing else needs to
                       change to support it.
 mlb_stats/api.py      API calls: find_player(), get_game_log(),
-                      find_team(), get_team_schedule()
+                      find_team(), get_team_schedule(), find_division(),
+                      get_division_standings()
 mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       build_team_win_dataframe() (flattens a team
                       schedule into the same shape build_stat_dataframe
@@ -259,7 +286,9 @@ mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       add_rolling_stat(), format_stat_table(),
                       plot_stat(), plot_stat_comparison()
                       (COMPARISON_LAYOUTS lists the valid --layout
-                      values for comparison mode)
+                      values for comparison mode), and the standings
+                      trio: build_standings_dataframe(),
+                      format_standings_table(), plot_standings()
 mlb_stats/cli.py      Argument parsing / entry point (main())
 
 Data source: MLB Stats API (https://statsapi.mlb.com) — public,
@@ -271,6 +300,4 @@ WHAT'S NEXT
 
 Possible future extensions:
 
-  - Team standings comparison across all 30 teams (division/wild-card
-    standings, not a per-game time series like everything else in this
-    app -- likely a different chart type, e.g. a bar chart)
+  - Wild-card standings across a full league, not just one division

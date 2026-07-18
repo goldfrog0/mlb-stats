@@ -51,6 +51,35 @@ body {
   gap: 0.9rem;
 }
 
+#statFields,
+#standingsFields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 0.45rem 0.5rem;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 .field {
   display: flex;
   flex-direction: column;

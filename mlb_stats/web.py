@@ -13,8 +13,17 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from mlb_stats.api import find_player, find_team, get_game_log, get_team_schedule, search_players
+from mlb_stats.api import (
+    find_division,
+    find_player,
+    find_team,
+    get_division_standings,
+    get_game_log,
+    get_team_schedule,
+    search_players,
+)
 from mlb_stats.plots import (
+    build_standings_dataframe,
     build_stat_dataframe,
     build_team_win_dataframe,
     add_rolling_stat,
@@ -106,6 +115,18 @@ def compare_stat(
         "player1": {"name": name1, "data": _serialize(df1)},
         "player2": {"name": name2, "data": _serialize(df2)},
     }
+
+
+@app.get("/api/standings")
+def standings(division: str, season: int | None = None) -> dict[str, Any]:
+    try:
+        division_id, division_name = find_division(division)
+        team_records = get_division_standings(division_id, season or _current_season())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    df = build_standings_dataframe(team_records)
+    return {"division": division_name, "teams": df.to_dict(orient="records")}
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

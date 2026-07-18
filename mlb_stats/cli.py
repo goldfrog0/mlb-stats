@@ -4,13 +4,23 @@ import re
 
 import pandas as pd
 
-from mlb_stats.api import find_player, find_team, get_game_log, get_team_schedule
+from mlb_stats.api import (
+    find_division,
+    find_player,
+    find_team,
+    get_division_standings,
+    get_game_log,
+    get_team_schedule,
+)
 from mlb_stats.plots import (
     COMPARISON_LAYOUTS,
     build_stat_dataframe,
+    build_standings_dataframe,
     build_team_win_dataframe,
     add_rolling_stat,
+    format_standings_table,
     format_stat_table,
+    plot_standings,
     plot_stat,
     plot_stat_comparison,
 )
@@ -38,6 +48,13 @@ def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> 
     return df, full_name
 
 
+def _load_standings_dataframe(division_name: str, season: int) -> tuple[pd.DataFrame, str]:
+    division_id, full_name = find_division(division_name)
+    team_records = get_division_standings(division_id, season)
+    df = build_standings_dataframe(team_records)
+    return df, full_name
+
+
 def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
@@ -52,6 +69,10 @@ def _auto_filename_single(player: str, stat: str, season: int, window: int) -> s
         name += f"_w{window}"
     name += f"_{_today_str()}"
     return f"{name}.png"
+
+
+def _auto_filename_standings(division_name: str, season: int) -> str:
+    return f"{_slugify(division_name)}_standings_{season}_{_today_str()}.png"
 
 
 def _auto_filename_compare(
@@ -76,13 +97,18 @@ def main() -> None:
         prog="mlb-stats",
         description="MLB player stat visualizer"
     )
-    parser.add_argument("player", type=str,
+    parser.add_argument("player", type=str, nargs="?", default=None,
                         help='Player name, e.g. "Shohei Ohtani" -- or a team name for team stats '
-                             'like win_pct, e.g. "Los Angeles Dodgers"')
+                             'like win_pct, e.g. "Los Angeles Dodgers". Not required with '
+                             "--standings")
     parser.add_argument("player2", type=str, nargs="?", default=None,
                         help="Optional second player or team to compare against")
     parser.add_argument("--stat", type=str, default="era", choices=sorted(STAT_CONFIGS),
                         help="Stat to plot (default: era)")
+    parser.add_argument("--standings", type=str, default=None, metavar="DIVISION",
+                        help='Show a division\'s standings instead of plotting a player/team, '
+                             'e.g. --standings "AL East". Ignores player/player2/--stat; '
+                             "--season, --save, and --table still apply")
     parser.add_argument("--season", type=int, default=CURRENT_YEAR, help=f"Season year (default: {CURRENT_YEAR})")
     parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
                         help=f"Rolling average window (default: {DEFAULT_WINDOW})")
@@ -105,8 +131,24 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if not args.standings and not args.player:
+        parser.error("player is required unless --standings is given")
+
     try:
-        if args.player2:
+        if args.standings:
+            df, division_name = _load_standings_dataframe(args.standings, args.season)
+
+            if args.table:
+                print(f"\n{division_name}")
+                print("-" * len(division_name))
+                print(format_standings_table(df))
+
+            save_path = args.save
+            if save_path == AUTO_SAVE:
+                save_path = _auto_filename_standings(division_name, args.season)
+
+            plot_standings(df, division_name, args.season, save_path=save_path)
+        elif args.player2:
             df1, name1 = _load_stat_dataframe(args.player, args.season, args.stat, args.window)
             df2, name2 = _load_stat_dataframe(args.player2, args.season, args.stat, args.window)
 

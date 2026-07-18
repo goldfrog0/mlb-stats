@@ -133,6 +133,37 @@ def build_team_win_dataframe(games: list[dict[str, Any]], team_id: int) -> pd.Da
     return df
 
 
+def build_standings_dataframe(team_records: list[dict[str, Any]]) -> pd.DataFrame:
+    """Flatten a division's standings into a display-ready DataFrame,
+    sorted best-to-worst. Unlike every other build_*_dataframe in this
+    module, there's no per-game rolling/cumulative concept here --
+    standings are a single current snapshot, so this just reshapes what
+    the API already gives us rather than computing anything."""
+    rows = [
+        {
+            "rank": int(tr["divisionRank"]),
+            "team": tr["team"]["name"],
+            "wins": tr["leagueRecord"]["wins"],
+            "losses": tr["leagueRecord"]["losses"],
+            "pct": float(tr["leagueRecord"]["pct"]),
+            "games_back": tr.get("divisionGamesBack", "-"),
+            "streak": tr.get("streak", {}).get("streakCode", ""),
+        }
+        for tr in team_records
+    ]
+    return pd.DataFrame(rows).sort_values("rank").reset_index(drop=True)
+
+
+def format_standings_table(df: pd.DataFrame) -> str:
+    """Render a division's standings as a plain aligned text table."""
+    table = df.rename(columns={
+        "rank": "Rank", "team": "Team", "wins": "W", "losses": "L",
+        "pct": "PCT", "games_back": "GB", "streak": "Streak",
+    }).copy()
+    table["PCT"] = table["PCT"].round(3)
+    return table.to_string(index=False)
+
+
 def _rolling_value_for_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.Series:
     config = get_stat_config(stat_key)
     if "composite_of" in config:
@@ -360,5 +391,30 @@ def plot_stat_comparison(
     if diff_ax is not None:
         _draw_diff_panel(diff_ax, df1, name1, df2, name2, color1, color2, label)
 
+    plt.tight_layout()
+    _finish_plot(save_path)
+
+
+def plot_standings(df: pd.DataFrame, division_name: str, season: int, save_path: str | None = None) -> None:
+    """Render a division's standings as a horizontal bar chart (win% per
+    team, best team on top), annotated with each team's W-L record."""
+    fig_height = 1.2 + 0.6 * len(df)
+    plt.figure(figsize=(9, fig_height))
+
+    # barh plots its first row at the bottom, so reverse the (already
+    # rank-sorted) rows to put the division leader at the top instead.
+    ordered = df.iloc[::-1]
+    colors = ["crimson" if rank == 1 else "steelblue" for rank in ordered["rank"]]
+    bars = plt.barh(ordered["team"], ordered["pct"], color=colors)
+
+    max_pct = df["pct"].max()
+    for bar, (_, row) in zip(bars, ordered.iterrows()):
+        label = f"{row['wins']}-{row['losses']}  ({row['pct']:.3f})"
+        plt.text(bar.get_width() + max_pct * 0.02, bar.get_y() + bar.get_height() / 2,
+                  label, va="center", fontsize=9)
+
+    plt.xlabel("Win%")
+    plt.title(f"{division_name} Standings ({season} Season)")
+    plt.xlim(0, max_pct * 1.3)
     plt.tight_layout()
     _finish_plot(save_path)

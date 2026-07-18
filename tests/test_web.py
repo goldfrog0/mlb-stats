@@ -100,6 +100,39 @@ class TestTeamStat:
         assert len(payload["player2"]["data"]) == 6
 
 
+class TestStandingsEndpoint:
+    @pytest.fixture
+    def fake_standings_api(self, monkeypatch, division_team_records):
+        monkeypatch.setattr(web, "find_division", lambda name: (201, "American League East"))
+        monkeypatch.setattr(web, "get_division_standings", lambda division_id, season: division_team_records)
+
+    def test_response_shape(self, fake_standings_api) -> None:
+        resp = client.get("/api/standings", params={"division": "AL East"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["division"] == "American League East"
+        assert len(payload["teams"]) == 4
+        assert payload["teams"][0]["team"] == "Rays"
+        assert payload["teams"][0]["pct"] == pytest.approx(0.596)
+
+    def test_season_param_is_optional(self, fake_standings_api) -> None:
+        resp = client.get("/api/standings", params={"division": "AL East"})
+        assert resp.status_code == 200
+
+    def test_unknown_division_is_404(self, monkeypatch) -> None:
+        def raise_not_found(name):
+            raise ValueError(f"No division found for '{name}'")
+
+        monkeypatch.setattr(web, "find_division", raise_not_found)
+        resp = client.get("/api/standings", params={"division": "Zzz"})
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "No division found for 'Zzz'"
+
+    def test_missing_division_param_is_a_validation_error(self) -> None:
+        resp = client.get("/api/standings")
+        assert resp.status_code == 422
+
+
 class TestCompareEndpoint:
     def test_both_players_resolved(self, fake_api) -> None:
         resp = client.get("/api/compare", params={"player1": "A", "player2": "B", "stat": "era"})

@@ -106,3 +106,59 @@ def get_team_schedule(team_id: int, season: int) -> list[dict[str, Any]]:
         raise ValueError(f"No schedule found for team ID {team_id} in {season}")
 
     return games
+
+
+def _normalize_division_query(query: str) -> str:
+    """"AL East" -> "american league east" so it substring-matches the
+    API's full division names ("American League East"). Only the first
+    word gets expanded, so "national league" typed out already works
+    unchanged."""
+    words = query.strip().lower().split()
+    aliases = {"al": "american league", "nl": "national league"}
+    if words and words[0] in aliases:
+        words[0] = aliases[words[0]]
+    return " ".join(words)
+
+
+def find_division(name: str) -> tuple[int, str]:
+    """Search for a division by (partial, case-insensitive) name, e.g.
+    "AL East", "National League Central", or "west". Returns
+    (division_id, full_name) or raises. Derived from the cached team
+    list (each team carries its division), rather than a separate
+    endpoint call."""
+    query = _normalize_division_query(name)
+    matched_by_id: dict[int, str] = {}
+    for t in _all_teams():
+        division = t["division"]
+        if query in division["name"].lower():
+            matched_by_id.setdefault(division["id"], division["name"])
+
+    if not matched_by_id:
+        raise ValueError(f"No division found for '{name}'")
+
+    if len(matched_by_id) > 1:
+        first_name = next(iter(matched_by_id.values()))
+        print(f"Multiple matches, using: {first_name}")
+
+    division_id, division_name = next(iter(matched_by_id.items()))
+    return division_id, division_name
+
+
+@ttl_cache(GAME_LOG_TTL_SECONDS)
+def get_division_standings(division_id: int, season: int) -> list[dict[str, Any]]:
+    """Fetch a division's current standings for a season: one record per
+    team (record, rank, games back, streak), in the order the API
+    returns them (already ranked best-to-worst)."""
+    params: dict[str, str | int] = {"leagueId": "103,104", "season": season}
+    resp = requests.get(f"{BASE_URL}/standings", params=params)
+    resp.raise_for_status()
+    data = resp.json()
+
+    for division_record in data.get("records", []):
+        if division_record.get("division", {}).get("id") == division_id:
+            team_records = division_record.get("teamRecords", [])
+            if not team_records:
+                raise ValueError(f"No standings found for division ID {division_id} in {season}")
+            return team_records
+
+    raise ValueError(f"No standings found for division ID {division_id} in {season}")

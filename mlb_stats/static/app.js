@@ -256,6 +256,62 @@ function renderTable(sections) {
   tableContainer.innerHTML = html;
 }
 
+// Standings are a single current snapshot across several teams, not a
+// per-game time series for one or two "subjects" like everything else
+// in this app -- so this gets its own bar-chart renderer and table
+// (with its own columns) rather than reusing buildSingleTraces/renderTable.
+async function plotStandings(division, season) {
+  const url = `/api/standings?division=${encodeURIComponent(division)}&season=${season}`;
+  const resp = await fetch(url);
+  const payload = await resp.json();
+  if (!resp.ok) throw new Error(payload.detail || "Request failed");
+
+  const teams = payload.teams; // already rank-sorted, best team first
+  // Plotly's horizontal bars plot the first entry at the bottom, so
+  // reverse to put the division leader at the top (mirrors plots.py).
+  const ordered = [...teams].reverse();
+
+  const trace = {
+    type: "bar",
+    orientation: "h",
+    x: ordered.map((t) => t.pct),
+    y: ordered.map((t) => t.team),
+    marker: { color: ordered.map((t) => (t.rank === 1 ? COLOR1 : COLOR2)) },
+    text: ordered.map((t) => `${t.wins}-${t.losses}  (${t.pct.toFixed(3)})`),
+    textposition: "outside",
+    hovertemplate: "%{y}<br>Win%% %{x:.3f}<extra></extra>",
+  };
+
+  const maxPct = Math.max(...teams.map((t) => t.pct));
+
+  Plotly.newPlot(chartEl, [trace], {
+    title: `${payload.division} Standings (${season} Season)`,
+    xaxis: { title: "Win%", range: [0, maxPct * 1.3] },
+    margin: { l: 110, r: 90 },
+    height: 140 + 60 * teams.length,
+    showlegend: false,
+  }, { responsive: true });
+
+  renderStandingsTable(payload.division, teams);
+}
+
+function renderStandingsTable(divisionName, teams) {
+  if (!document.getElementById("showStandingsTable").checked) {
+    tableContainer.innerHTML = "";
+    return;
+  }
+
+  let html = `<h2>${divisionName}</h2><table><thead><tr>
+    <th>Rank</th><th>Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>Streak</th>
+  </tr></thead><tbody>`;
+  for (const t of teams) {
+    html += `<tr><td>${t.rank}</td><td>${t.team}</td><td>${t.wins}</td><td>${t.losses}</td>`
+          + `<td>${t.pct.toFixed(3)}</td><td>${t.games_back}</td><td>${t.streak}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  tableContainer.innerHTML = html;
+}
+
 async function plotSingle(player, stat, season, window, showCumulative) {
   const url = `/api/player?name=${encodeURIComponent(player)}&stat=${stat}&season=${season}&window=${window}`;
   const resp = await fetch(url);
@@ -317,24 +373,51 @@ async function plotCompare(player1, player2, stat, season, window, showCumulativ
   ]);
 }
 
+// Mode toggle: swaps which field group is visible and which plotting
+// path the submit handler takes.
+const modeButtons = document.querySelectorAll(".mode-btn");
+const statFields = document.getElementById("statFields");
+const standingsFields = document.getElementById("standingsFields");
+const player1Input = document.getElementById("player1");
+
+function setMode(mode) {
+  modeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.mode === mode));
+  statFields.hidden = mode !== "stats";
+  standingsFields.hidden = mode !== "standings";
+  // player1's "required" doesn't reliably get exempted from constraint
+  // validation just because an ancestor is hidden (browser-dependent),
+  // so toggle it directly rather than relying on that.
+  player1Input.required = mode === "stats";
+}
+
+modeButtons.forEach((btn) => btn.addEventListener("click", () => setMode(btn.dataset.mode)));
+
 document.getElementById("controls").addEventListener("submit", async (event) => {
   event.preventDefault();
   showError("");
 
-  const player1 = document.getElementById("player1").value.trim();
-  const player2 = document.getElementById("player2").value.trim();
-  const stat = statSelect.value;
-  const season = document.getElementById("season").value;
-  const window = document.getElementById("window").value;
-  const showCumulative = document.getElementById("showCumulative").checked;
-  const layoutMode = document.getElementById("layout").value;
-  const showDiff = document.getElementById("showDiff").checked;
+  const mode = document.querySelector(".mode-btn.active").dataset.mode;
 
   try {
-    if (player2) {
-      await plotCompare(player1, player2, stat, season, window, showCumulative, layoutMode, showDiff);
+    if (mode === "standings") {
+      const division = document.getElementById("division").value;
+      const season = document.getElementById("standingsSeason").value;
+      await plotStandings(division, season);
     } else {
-      await plotSingle(player1, stat, season, window, showCumulative);
+      const player1 = document.getElementById("player1").value.trim();
+      const player2 = document.getElementById("player2").value.trim();
+      const stat = statSelect.value;
+      const season = document.getElementById("season").value;
+      const window = document.getElementById("window").value;
+      const showCumulative = document.getElementById("showCumulative").checked;
+      const layoutMode = document.getElementById("layout").value;
+      const showDiff = document.getElementById("showDiff").checked;
+
+      if (player2) {
+        await plotCompare(player1, player2, stat, season, window, showCumulative, layoutMode, showDiff);
+      } else {
+        await plotSingle(player1, stat, season, window, showCumulative);
+      }
     }
   } catch (err) {
     showError(err.message);
@@ -388,8 +471,9 @@ function wireAutocomplete(inputId, datalistId) {
 wireAutocomplete("player1", "player1-suggestions");
 wireAutocomplete("player2", "player2-suggestions");
 
-// Default the season input to the current year (the backend also falls
+// Default the season inputs to the current year (the backend also falls
 // back to the current season server-side when the param is omitted).
 document.getElementById("season").value = new Date().getFullYear();
+document.getElementById("standingsSeason").value = new Date().getFullYear();
 
 loadStats();
