@@ -47,8 +47,16 @@ def search_players(query: str, limit: int = 8) -> list[dict[str, Any]]:
 @ttl_cache(GAME_LOG_TTL_SECONDS)
 def get_game_log(player_id: int, season: int, group: str) -> list[dict[str, Any]]:
     """Fetch per-game stats for a player in a given season and stat group
-    (e.g. "pitching" or "batting")."""
-    params: dict[str, str | int] = {"stats": "gameLog", "group": group, "season": season}
+    (e.g. "pitching" or "batting").
+
+    The API's name for the batting group is "hitting" -- an unrecognized
+    group is silently ignored and the player's default group is returned
+    instead, which happens to be the hitting log for pure batters (so
+    "batting" appeared to work) but the PITCHING log for a two-way
+    player. Translate rather than renaming the app-wide group, which is
+    user-facing in labels and docs."""
+    api_group = {"batting": "hitting"}.get(group, group)
+    params: dict[str, str | int] = {"stats": "gameLog", "group": api_group, "season": season}
     resp = requests.get(f"{BASE_URL}/people/{player_id}/stats", params=params)
     resp.raise_for_status()
     data = resp.json()
