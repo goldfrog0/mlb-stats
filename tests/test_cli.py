@@ -141,6 +141,42 @@ class TestMain:
         assert "American League East" in printed
         assert "Rays" in printed
 
+    @pytest.fixture
+    def fake_war_api(self, monkeypatch, career_war_seasons):
+        war_by_season_group = {
+            (s["season"], group): s[key]
+            for s in career_war_seasons
+            for group, key in [("hitting", "batting"), ("pitching", "pitching")]
+        }
+        monkeypatch.setattr(cli, "find_player", lambda name: (660271, f"Resolved {name}"))
+        monkeypatch.setattr(cli, "get_debut_year", lambda pid: 2018)
+        monkeypatch.setattr(cli, "get_season_war",
+                            lambda pid, season, group: war_by_season_group.get((season, group)))
+
+    def test_war_saves_chart_and_prints_table(self, fake_war_api, monkeypatch, tmp_path, capsys) -> None:
+        out = tmp_path / "war.png"
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Someone", "--war", "--table", "--save", str(out)])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+        printed = capsys.readouterr().out
+        assert "Resolved Someone" in printed
+        assert "Career" in printed
+
+    def test_war_comparison_loads_both_players(self, fake_war_api, monkeypatch, tmp_path, capsys) -> None:
+        monkeypatch.setattr("sys.argv", [
+            "mlb-stats", "Someone", "Someone Else", "--war", "--table", "--save", str(tmp_path / "w.png"),
+        ])
+        cli.main()
+        printed = capsys.readouterr().out
+        assert "Resolved Someone" in printed
+        assert "Resolved Someone Else" in printed
+
+    def test_war_with_standings_is_a_usage_error(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Someone", "--war", "--standings", "AL East"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 2
+
     def test_no_player_and_no_standings_is_a_usage_error(self, monkeypatch) -> None:
         monkeypatch.setattr("sys.argv", ["mlb-stats"])
         with pytest.raises(SystemExit) as excinfo:

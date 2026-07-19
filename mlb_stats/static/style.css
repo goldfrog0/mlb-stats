@@ -52,7 +52,8 @@ body {
 }
 
 #statFields,
-#standingsFields {
+#standingsFields,
+#warFields {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -60,9 +61,10 @@ body {
 
 /* The display: flex above would otherwise override the browser's own
    [hidden] { display: none } (ID selector wins over the UA stylesheet),
-   leaving both field groups visible at once regardless of mode. */
+   leaving every field group visible at once regardless of mode. */
 #statFields[hidden],
-#standingsFields[hidden] {
+#standingsFields[hidden],
+#warFields[hidden] {
   display: none;
 }
 
