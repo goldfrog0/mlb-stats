@@ -5,6 +5,8 @@ import requests
 from mlb_stats.cache import ttl_cache
 
 BASE_URL = "https://statsapi.mlb.com/api/v1"
+# The play-by-play feed lives on a newer API version than everything else.
+FEED_BASE_URL = "https://statsapi.mlb.com/api/v1.1"
 
 # Player identities are stable, so lookups can be cached for a long time.
 # Game logs gain a new entry whenever a game finishes, so they get a short
@@ -12,6 +14,9 @@ BASE_URL = "https://statsapi.mlb.com/api/v1"
 # never cached (see ttl_cache).
 PLAYER_TTL_SECONDS = 24 * 60 * 60
 GAME_LOG_TTL_SECONDS = 15 * 60
+# Pitch data is only ever fetched for games that already appear in a
+# finished game log, and a completed game's play-by-play never changes.
+GAME_PITCHES_TTL_SECONDS = 24 * 60 * 60
 
 
 @ttl_cache(PLAYER_TTL_SECONDS)
@@ -59,6 +64,33 @@ def get_game_log(player_id: int, season: int, group: str) -> list[dict[str, Any]
         raise ValueError(f"No {group} data found for player ID {player_id} in {season}")
 
     return splits
+
+
+@ttl_cache(GAME_PITCHES_TTL_SECONDS)
+def get_game_pitches(game_pk: int) -> list[dict[str, Any]]:
+    """Fetch every pitch thrown in a game, flattened from the game's
+    play-by-play feed into one compact dict per pitch: the pitcher's id,
+    the pitch type description (e.g. "Four-Seam Fastball"), and the
+    release velocity in mph (None on the rare pitch the tracking system
+    missed). The raw feed is a multi-megabyte document; only these three
+    fields are kept so the cache stays small across many games."""
+    resp = requests.get(f"{FEED_BASE_URL}/game/{game_pk}/feed/live")
+    resp.raise_for_status()
+    plays = resp.json().get("liveData", {}).get("plays", {}).get("allPlays", [])
+
+    pitches = []
+    for play in plays:
+        pitcher_id = play["matchup"]["pitcher"]["id"]
+        for event in play["playEvents"]:
+            if not event.get("isPitch"):
+                continue
+            pitches.append({
+                "pitcher_id": pitcher_id,
+                "pitch_type": event.get("details", {}).get("type", {}).get("description", "Unknown"),
+                "velo": event.get("pitchData", {}).get("startSpeed"),
+            })
+
+    return pitches
 
 
 @ttl_cache(PLAYER_TTL_SECONDS)

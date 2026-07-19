@@ -373,21 +373,109 @@ async function plotCompare(player1, player2, stat, season, window, showCumulativ
   ]);
 }
 
+// One column of jittered dots per game, colored by pitch type, plus a
+// dashed line tracing each game's max velo (mirrors the CLI's
+// plot_pitch_velocities). Games sit at integer x positions labeled with
+// their dates -- a categorical axis can't take the +/- jitter offsets.
+async function plotVelo(player, season, start, end) {
+  let url = `/api/pitch-velocities?name=${encodeURIComponent(player)}&season=${season}`;
+  if (start) url += `&start=${start}`;
+  if (end) url += `&end=${end}`;
+  const resp = await fetch(url);
+  const payload = await resp.json();
+  if (!resp.ok) throw new Error(payload.detail || "Request failed");
+
+  const pitches = payload.pitches;
+  const dates = [...new Set(pitches.map((p) => p.date))].sort();
+  const xByDate = new Map(dates.map((d, i) => [d, i]));
+
+  const types = [...new Set(pitches.map((p) => p.pitch_type))].sort();
+  const traces = types.map((type) => {
+    const ofType = pitches.filter((p) => p.pitch_type === type);
+    return {
+      x: ofType.map((p) => xByDate.get(p.date) + (Math.random() * 0.56 - 0.28)),
+      y: ofType.map((p) => p.velo),
+      name: type,
+      mode: "markers",
+      marker: { size: 5, opacity: 0.6 },
+      text: ofType.map((p) => p.date),
+      hovertemplate: "%{text}<br>%{y:.1f} mph<extra>" + type + "</extra>",
+    };
+  });
+
+  const gameMax = dates.map((d) =>
+    Math.max(...pitches.filter((p) => p.date === d).map((p) => p.velo)));
+  traces.push({
+    x: dates.map((d, i) => i),
+    y: gameMax,
+    name: "Game max",
+    mode: "lines+markers",
+    line: { color: "black", width: 1, dash: "dash" },
+    marker: { symbol: "line-ew-open", size: 12 },
+    hovertemplate: "%{y:.1f} mph<extra>Game max</extra>",
+  });
+
+  Plotly.newPlot(chartEl, traces, {
+    title: `${payload.name} — Pitch Velocities by Game (${season} Season)`,
+    // zeroline off: the x=0 zeroline would draw a vertical bar straight
+    // through the first game's dot column.
+    xaxis: { title: "Game date", tickvals: dates.map((d, i) => i), ticktext: dates, tickangle: 45, zeroline: false },
+    yaxis: { title: "Velocity (mph)" },
+    // Pushed lower than the shared legend position so it clears the
+    // angled date labels plus the axis title.
+    legend: { ...HORIZONTAL_LEGEND, y: -0.28 },
+    margin: { b: 130 },
+    height: 570,
+  }, { responsive: true });
+
+  renderVeloTable(payload.name, pitches, dates);
+}
+
+function renderVeloTable(playerName, pitches, dates) {
+  if (!document.getElementById("showVeloTable").checked) {
+    tableContainer.innerHTML = "";
+    return;
+  }
+
+  const median = (values) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
+
+  let html = `<h2>${playerName}</h2><table><thead><tr>
+    <th>Date</th><th>Opponent</th><th>Pitches</th><th>Max</th><th>Median</th><th>Min</th>
+  </tr></thead><tbody>`;
+  for (const date of dates) {
+    const game = pitches.filter((p) => p.date === date);
+    const velos = game.map((p) => p.velo);
+    html += `<tr><td>${date}</td><td>${game[0].opponent}</td><td>${velos.length}</td>`
+          + `<td>${Math.max(...velos).toFixed(1)}</td><td>${median(velos).toFixed(1)}</td>`
+          + `<td>${Math.min(...velos).toFixed(1)}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  tableContainer.innerHTML = html;
+}
+
 // Mode toggle: swaps which field group is visible and which plotting
 // path the submit handler takes.
 const modeButtons = document.querySelectorAll(".mode-btn");
 const statFields = document.getElementById("statFields");
 const standingsFields = document.getElementById("standingsFields");
+const veloFields = document.getElementById("veloFields");
 const player1Input = document.getElementById("player1");
+const veloPlayerInput = document.getElementById("veloPlayer");
 
 function setMode(mode) {
   modeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.mode === mode));
   statFields.hidden = mode !== "stats";
   standingsFields.hidden = mode !== "standings";
-  // player1's "required" doesn't reliably get exempted from constraint
+  veloFields.hidden = mode !== "velo";
+  // A field's "required" doesn't reliably get exempted from constraint
   // validation just because an ancestor is hidden (browser-dependent),
   // so toggle it directly rather than relying on that.
   player1Input.required = mode === "stats";
+  veloPlayerInput.required = mode === "velo";
 }
 
 modeButtons.forEach((btn) => btn.addEventListener("click", () => setMode(btn.dataset.mode)));
@@ -403,6 +491,12 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
       const division = document.getElementById("division").value;
       const season = document.getElementById("standingsSeason").value;
       await plotStandings(division, season);
+    } else if (mode === "velo") {
+      const player = document.getElementById("veloPlayer").value.trim();
+      const season = document.getElementById("veloSeason").value;
+      const start = document.getElementById("veloStart").value;
+      const end = document.getElementById("veloEnd").value;
+      await plotVelo(player, season, start, end);
     } else {
       const player1 = document.getElementById("player1").value.trim();
       const player2 = document.getElementById("player2").value.trim();
@@ -470,10 +564,12 @@ function wireAutocomplete(inputId, datalistId) {
 
 wireAutocomplete("player1", "player1-suggestions");
 wireAutocomplete("player2", "player2-suggestions");
+wireAutocomplete("veloPlayer", "veloPlayer-suggestions");
 
 // Default the season inputs to the current year (the backend also falls
 // back to the current season server-side when the param is omitted).
 document.getElementById("season").value = new Date().getFullYear();
 document.getElementById("standingsSeason").value = new Date().getFullYear();
+document.getElementById("veloSeason").value = new Date().getFullYear();
 
 loadStats();

@@ -132,6 +132,42 @@ def batting_splits() -> list[dict[str, Any]]:
     ]
 
 
+PITCHER_ID = 694973
+
+
+@pytest.fixture
+def velo_game_splits() -> list[dict[str, Any]]:
+    """Two pitching game-log splits carrying just the fields the
+    velocity feature reads (date, opponent, and the gamePk used to fetch
+    each game's pitches)."""
+    return [
+        {"date": "2026-06-01", "opponent": {"name": "Opponent A"}, "game": {"gamePk": 111}},
+        {"date": "2026-06-06", "opponent": {"name": "Opponent B"}, "game": {"gamePk": 222}},
+    ]
+
+
+@pytest.fixture
+def game_pitches_by_pk() -> dict[int, list[dict[str, Any]]]:
+    """Pitches in the shape get_game_pitches returns them, keyed by
+    gamePk. Game 111 includes another pitcher's pitch and one with no
+    tracked velocity -- build_pitch_dataframe must drop both, leaving
+    hand-checkable per-game numbers: game 111 -> 3 pitches (97/95/85),
+    game 222 -> 2 pitches (98.5/84)."""
+    return {
+        111: [
+            {"pitcher_id": PITCHER_ID, "pitch_type": "Four-Seam Fastball", "velo": 97.0},
+            {"pitcher_id": PITCHER_ID, "pitch_type": "Four-Seam Fastball", "velo": 95.0},
+            {"pitcher_id": PITCHER_ID, "pitch_type": "Slider", "velo": 85.0},
+            {"pitcher_id": PITCHER_ID, "pitch_type": "Slider", "velo": None},
+            {"pitcher_id": 999, "pitch_type": "Sinker", "velo": 92.0},
+        ],
+        222: [
+            {"pitcher_id": PITCHER_ID, "pitch_type": "Four-Seam Fastball", "velo": 98.5},
+            {"pitcher_id": PITCHER_ID, "pitch_type": "Curveball", "velo": 84.0},
+        ],
+    }
+
+
 @pytest.fixture
 def division_team_records() -> list[dict[str, Any]]:
     """Four teams' standings records, in the shape /standings returns
