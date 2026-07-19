@@ -19,6 +19,8 @@ from mlb_stats.api import (
     find_team,
     get_division_standings,
     get_game_log,
+    get_league_team_stats,
+    get_primary_position,
     get_team_schedule,
     search_players,
 )
@@ -30,6 +32,7 @@ from mlb_stats.plots import (
     compute_game_value,
 )
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
+from mlb_stats.war import build_war_approx_dataframe, league_fip, league_woba, position_adjustment
 
 app = FastAPI(title="MLB Stats")
 
@@ -57,6 +60,17 @@ def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> 
         team_id, full_name = find_team(name)
         games = get_team_schedule(team_id, season)
         df = build_team_win_dataframe(games, team_id)
+    elif config.get("computation") == "war_approx":
+        player_id, full_name = find_player(name)
+        splits = get_game_log(player_id, season, config["group"])
+        team_totals = get_league_team_stats(season, config["group"])
+        if config["group"] == "batting":
+            baseline = league_woba(team_totals)
+            pos_adj = position_adjustment(get_primary_position(player_id))
+        else:
+            baseline = league_fip(team_totals)
+            pos_adj = 0.0
+        df = build_war_approx_dataframe(splits, config["group"], baseline, pos_adj)
     else:
         player_id, full_name = find_player(name)
         splits = get_game_log(player_id, season, config["group"])

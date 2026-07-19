@@ -35,6 +35,11 @@ class StatConfig(TypedDict):
     multiplier: NotRequired[float]
     constant: NotRequired[float]
     composite_of: NotRequired[list[str]]
+    # Escape hatch for stats that aren't a numerator/denominator rate at
+    # all. "war_approx" entries are built by war.build_war_approx_dataframe
+    # (which needs league baselines and a positional adjustment the
+    # rate machinery has no concept of) and roll up as sums, not rates.
+    computation: NotRequired[str]
 
 
 STAT_CONFIGS: dict[str, StatConfig] = {
@@ -115,6 +120,18 @@ STAT_CONFIGS: dict[str, StatConfig] = {
         "group": "batting",
         "cumulative_field": "ops",
         "composite_of": ["obp", "slg"],
+    },
+    "bwar": {
+        "label": "Batting WAR (approx)",
+        "group": "batting",
+        "cumulative_field": None,
+        "computation": "war_approx",
+    },
+    "pwar": {
+        "label": "Pitching WAR (approx)",
+        "group": "pitching",
+        "cumulative_field": None,
+        "computation": "war_approx",
     },
     "win_pct": {
         "label": "Win%",

@@ -141,6 +141,32 @@ class TestMain:
         assert "American League East" in printed
         assert "Rays" in printed
 
+    def test_bwar_saves_chart_and_prints_table(
+        self, monkeypatch, tmp_path, batting_splits, capsys,
+    ) -> None:
+        # League totals shaped like team season blobs; exact values don't
+        # matter here, only that the pipeline runs them through league_woba.
+        league = [{"atBats": 100, "hits": 25, "doubles": 5, "triples": 1, "homeRuns": 3,
+                   "baseOnBalls": 10, "intentionalWalks": 1, "hitByPitch": 2, "sacFlies": 2}]
+        monkeypatch.setattr(cli, "find_player", lambda name: (660271, "Test Batter"))
+        monkeypatch.setattr(cli, "get_game_log", lambda pid, season, group: batting_splits)
+        monkeypatch.setattr(cli, "get_league_team_stats", lambda season, group: league)
+        monkeypatch.setattr(cli, "get_primary_position", lambda pid: "DH")
+        out = tmp_path / "bwar.png"
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Test Batter", "--stat", "bwar", "--table", "--save", str(out)])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+        assert "game_bwar" in capsys.readouterr().out
+
+    def test_pwar_saves_chart(self, fake_api, monkeypatch, tmp_path) -> None:
+        league = [{"homeRuns": 20, "baseOnBalls": 60, "hitBatsmen": 10, "strikeOuts": 200,
+                   "inningsPitched": "300.0"}]
+        monkeypatch.setattr(cli, "get_league_team_stats", lambda season, group: league)
+        out = tmp_path / "pwar.png"
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Test Pitcher", "--stat", "pwar", "--save", str(out)])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+
     def test_no_player_and_no_standings_is_a_usage_error(self, monkeypatch) -> None:
         monkeypatch.setattr("sys.argv", ["mlb-stats"])
         with pytest.raises(SystemExit) as excinfo:
