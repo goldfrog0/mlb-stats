@@ -7,7 +7,13 @@ import pytest
 
 import mlb_stats.api as api
 from mlb_stats.plots import build_pitch_dataframe, filter_splits_by_date, format_pitch_table
-from tests.conftest import PITCHER_ID
+
+# Must match conftest.py's PITCHER_ID (the game_pitches_by_pk fixture
+# attributes its pitches to this id). Duplicated rather than imported:
+# `from tests.conftest import ...` only resolves when the repo root is
+# on sys.path, which `python -m pytest` guarantees but the bare pytest
+# binary (used in CI) does not.
+PITCHER_ID = 694973
 
 
 class FakeResponse:
