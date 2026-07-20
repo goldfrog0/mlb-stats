@@ -100,6 +100,31 @@ class TestTeamStat:
         assert len(payload["player2"]["data"]) == 6
 
 
+class TestWarApproxStat:
+    @pytest.fixture
+    def fake_war_api(self, monkeypatch, batting_splits):
+        league = [{"atBats": 100, "hits": 25, "doubles": 5, "triples": 1, "homeRuns": 3,
+                   "baseOnBalls": 10, "intentionalWalks": 1, "hitByPitch": 2, "sacFlies": 2}]
+        monkeypatch.setattr(web, "find_player", lambda name: (660271, f"Resolved {name}"))
+        monkeypatch.setattr(web, "get_game_log", lambda pid, season, group: batting_splits)
+        monkeypatch.setattr(web, "get_league_team_stats", lambda season, group: league)
+        monkeypatch.setattr(web, "get_primary_position", lambda pid: "DH")
+
+    def test_bwar_flows_through_the_player_endpoint(self, fake_war_api) -> None:
+        resp = client.get("/api/player", params={"name": "Someone", "stat": "bwar"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["label"] == "Batting WAR (approx)"
+        assert len(payload["data"]) == 6
+        # Standard serialized shape, so the frontend needs no changes.
+        assert set(payload["data"][0]) == {"date", "opponent", "game", "cumulative", "rolling"}
+
+    def test_bwar_listed_in_stats(self) -> None:
+        stats = client.get("/api/stats").json()
+        assert stats["bwar"] == {"label": "Batting WAR (approx)", "group": "batting"}
+        assert stats["pwar"] == {"label": "Pitching WAR (approx)", "group": "pitching"}
+
+
 class TestPitchVelocitiesEndpoint:
     @pytest.fixture
     def fake_velo_api(self, monkeypatch, velo_game_splits, game_pitches_by_pk):

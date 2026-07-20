@@ -99,13 +99,21 @@ def team_schedule_games() -> list[dict[str, Any]]:
 @pytest.fixture
 def batting_splits() -> list[dict[str, Any]]:
     """Six games with per-game counting stats plus the cumulative rate
-    strings the API would report for these totals."""
+    strings the API would report for these totals. The hit-type
+    breakdown (doubles/triples/homeRuns, for wOBA in approximate WAR)
+    is consistent with total_bases: e.g. game 4's 3 hits = single +
+    double + homer = 1 + 2 + 4 = 7 total bases."""
     at_bats = [4, 4, 3, 5, 4, 4]
     hits = [1, 2, 0, 3, 1, 2]
+    doubles = [0, 1, 0, 1, 1, 1]
+    triples = [0, 0, 0, 0, 0, 0]
+    home_runs = [0, 0, 0, 1, 0, 0]
     walks = [1, 0, 1, 0, 1, 0]
+    intentional_walks = [0, 0, 0, 0, 0, 0]
     hit_by_pitch = [0, 0, 0, 1, 0, 0]
     sac_flies = [0, 1, 0, 0, 0, 0]
     total_bases = [1, 3, 0, 7, 2, 3]
+    plate_appearances = [5, 5, 4, 6, 5, 4]  # AB + BB + HBP + SF
     cumulative_avg = [".250", ".375", ".273", ".375", ".350", ".375"]
     cumulative_obp = [".400", ".400", ".357", ".450", ".440", ".448"]
     cumulative_slg = [".250", ".500", ".364", ".688", ".650", ".667"]
@@ -122,10 +130,15 @@ def batting_splits() -> list[dict[str, Any]]:
                 "ops": cumulative_ops[i],
                 "atBats": at_bats[i],
                 "hits": hits[i],
+                "doubles": doubles[i],
+                "triples": triples[i],
+                "homeRuns": home_runs[i],
                 "baseOnBalls": walks[i],
+                "intentionalWalks": intentional_walks[i],
                 "hitByPitch": hit_by_pitch[i],
                 "sacFlies": sac_flies[i],
                 "totalBases": total_bases[i],
+                "plateAppearances": plate_appearances[i],
             },
         )
         for i in range(6)

@@ -17,6 +17,10 @@ def test_every_config_is_complete() -> None:
             # Composite stats delegate entirely to their components.
             for component in config["composite_of"]:
                 assert component in STAT_CONFIGS, f"{key} references unknown stat {component}"
+        elif "computation" in config:
+            # Bespoke-computation stats bypass the rate machinery; the
+            # marker must be one the plotting code actually handles.
+            assert config["computation"] == "war_approx", key
         else:
             assert config["numerator_fields"], key
             assert config["denominator_fields"], key

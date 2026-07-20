@@ -101,6 +101,38 @@ def get_game_pitches(game_pk: int) -> list[dict[str, Any]]:
     return pitches
 
 
+@ttl_cache(GAME_LOG_TTL_SECONDS)
+def get_league_team_stats(season: int, group: str) -> list[dict[str, Any]]:
+    """Every team's season-total stats for a group -- the raw material
+    for league-wide baselines (league wOBA/FIP for the approximate WAR
+    stats). Accepts this app's group names ("batting"), translating to
+    the API's ("hitting") where they differ."""
+    api_group = {"batting": "hitting"}.get(group, group)
+    params: dict[str, str | int] = {"sportId": 1, "season": season, "group": api_group, "stats": "season"}
+    resp = requests.get(f"{BASE_URL}/teams/stats", params=params)
+    resp.raise_for_status()
+
+    stats = resp.json().get("stats") or [{}]
+    splits = stats[0].get("splits", [])
+    if not splits:
+        raise ValueError(f"No league {group} stats found for {season}")
+
+    return [split["stat"] for split in splits]
+
+
+@ttl_cache(PLAYER_TTL_SECONDS)
+def get_primary_position(player_id: int) -> str:
+    """A player's primary position abbreviation ("SS", "DH", "TWP", ...)
+    from their person record; empty string if absent. Used for the
+    positional adjustment in approximate batting WAR."""
+    resp = requests.get(f"{BASE_URL}/people/{player_id}")
+    resp.raise_for_status()
+    people = resp.json().get("people", [])
+    if not people:
+        return ""
+    return people[0].get("primaryPosition", {}).get("abbreviation", "")
+
+
 @ttl_cache(PLAYER_TTL_SECONDS)
 def _all_teams() -> list[dict[str, Any]]:
     resp = requests.get(f"{BASE_URL}/teams", params={"sportId": 1})

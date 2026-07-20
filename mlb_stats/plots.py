@@ -229,6 +229,11 @@ def format_standings_table(df: pd.DataFrame) -> str:
 
 def _rolling_value_for_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.Series:
     config = get_stat_config(stat_key)
+    if config.get("computation") == "war_approx":
+        # WAR is a counting stat, not a rate: the rolling value is WAR
+        # accumulated over the last N games (a rolling sum), not a
+        # numerator/denominator recomputation.
+        return df["war_game"].rolling(window=window).sum()
     if "composite_of" in config:
         return sum(_rolling_value_for_stat(df, component, window) for component in config["composite_of"])
 
@@ -253,6 +258,8 @@ def compute_game_value(df: pd.DataFrame, stat_key: str) -> pd.Series:
     """This game's own value of stat_key (not season-cumulative or
     rolling), computed from that row's own numerator/denominator fields."""
     config = get_stat_config(stat_key)
+    if config.get("computation") == "war_approx":
+        return df["war_game"]
     if "composite_of" in config:
         return sum(compute_game_value(df, component) for component in config["composite_of"])
     numerator = _weighted_numerator(df, config["numerator_fields"])

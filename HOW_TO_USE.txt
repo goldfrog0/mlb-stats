@@ -45,12 +45,14 @@ Pitching:
   k9     Strikeouts per 9 innings
   bb9    Walks per 9 innings
   fip    Fielding Independent Pitching
+  pwar   Pitching WAR, approximate (see "A note on bwar/pwar" below)
 
 Batting:
   avg    Batting average
   obp    On-base percentage
   slg    Slugging percentage
   ops    On-base Plus Slugging (obp + slg)
+  bwar   Batting WAR, approximate (see "A note on bwar/pwar" below)
 
 Team:
   win_pct  Win percentage over the season
@@ -76,6 +78,26 @@ will be close but not perfectly official.
 
 A note on win_pct: also computed locally rather than from the API's
 own (pre-rounded) season record, for full precision.
+
+A note on bwar/pwar: the MLB API only reports WAR as a season-level
+snapshot -- there is no per-game WAR anywhere -- so these are computed
+locally, per game, from box-score counting stats using fWAR-style
+formulas: batting from wOBA linear weights plus replacement-level and
+positional adjustments; pitching from FIP plus replacement level.
+League baselines (league wOBA/FIP) are derived from all 30 teams'
+season totals with the same formulas, so nothing is hardcoded per
+season. What a box score can't see is left out: park factors,
+fielding, and baserunning. Validated against the API's official
+season WAR: pitchers land within about +/-0.3; bat-first hitters
+within about 0.2-0.8 (slightly low); elite defenders/baserunners read
+low by roughly their defensive value (~2 WAR for a Gold Glove
+shortstop) since this is essentially offense-only WAR. Treat the
+shape of the line as trustworthy and the level as approximate.
+
+Also note: since WAR is a counting stat rather than a rate, the
+"rolling" line for bwar/pwar is WAR ACCUMULATED over the last
+--window games (a rolling total), even where chart titles say
+"average"; the cumulative line is the running season total.
 
 
 COMPARING TWO PLAYERS (OR TEAMS)
@@ -312,7 +334,12 @@ mlb_stats/stats.py   Registry of supported stats (STAT_CONFIGS). Each
                       change to support it.
 mlb_stats/api.py      API calls: find_player(), get_game_log(),
                       find_team(), get_team_schedule(), find_division(),
-                      get_division_standings(), get_game_pitches()
+                      get_division_standings(), get_game_pitches(),
+                      get_league_team_stats(), get_primary_position()
+mlb_stats/war.py      Approximate per-game WAR (bwar/pwar): linear
+                      weights, league baselines derived from team
+                      totals, positional adjustment, and
+                      build_war_approx_dataframe()
 mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       build_team_win_dataframe() (flattens a team
                       schedule into the same shape build_stat_dataframe
