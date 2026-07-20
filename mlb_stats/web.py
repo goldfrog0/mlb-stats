@@ -17,11 +17,13 @@ from mlb_stats.api import (
     find_division,
     find_player,
     find_team,
+    get_debut_year,
     get_division_standings,
     get_game_log,
     get_game_pitches,
     get_league_team_stats,
     get_primary_position,
+    get_season_war,
     get_team_schedule,
     search_players,
 )
@@ -30,6 +32,7 @@ from mlb_stats.plots import (
     build_standings_dataframe,
     build_stat_dataframe,
     build_team_win_dataframe,
+    build_war_dataframe,
     add_rolling_stat,
     compute_game_value,
     filter_splits_by_date,
@@ -132,6 +135,30 @@ def compare_stat(
         "player1": {"name": name1, "data": _serialize(df1)},
         "player2": {"name": name2, "data": _serialize(df2)},
     }
+
+
+@app.get("/api/career-war")
+def career_war(name: str) -> dict[str, Any]:
+    """A player's WAR for every season from their MLB debut through the
+    current year (batting + pitching components and their total). No
+    season/window params: the API only exposes WAR season-by-season, so
+    this is always the whole career (see get_season_war)."""
+    try:
+        player_id, full_name = find_player(name)
+        debut_year = get_debut_year(player_id)
+        seasons = [
+            {
+                "season": season,
+                "batting": get_season_war(player_id, season, "hitting"),
+                "pitching": get_season_war(player_id, season, "pitching"),
+            }
+            for season in range(debut_year, _current_season() + 1)
+        ]
+        df = build_war_dataframe(seasons)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {"name": full_name, "seasons": df.to_dict(orient="records")}
 
 
 @app.get("/api/pitch-velocities")

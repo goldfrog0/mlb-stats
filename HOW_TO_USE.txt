@@ -268,6 +268,40 @@ since there's no rolling time series.
        mlb-stats --standings "AL East" --table --save east.png
 
 
+CAREER WAR (--war)
+--------------------
+
+Plot a player's WAR (Wins Above Replacement) for every season of
+their career, one stacked bar per season -- batting WAR plus pitching
+WAR, which both matter for a two-way player like Ohtani (everyone
+else's bar is effectively one color). Each bar is annotated with the
+season's total:
+
+     mlb-stats "Shohei Ohtani" --war
+     mlb-stats "Shohei Ohtani" "Aaron Judge" --war
+     mlb-stats "Shohei Ohtani" --war --table --save
+
+A second player puts the two side by side per season (player 1 in
+crimson, player 2 in steelblue, pitching as the lighter shade).
+--table prints one row per season plus a career-totals row; --save
+works as usual.
+
+Unlike everything else in this app, WAR has no per-game or date-range
+form in the MLB API -- it's only available as a season-level value
+(from the API's sabermetrics stats). So this view always spans the
+player's whole career, debut year through today, and --season/
+--window/--stat don't apply. Seasons with no MLB appearances at all
+(e.g. a year lost to injury) are omitted entirely rather than shown
+as zero -- "didn't play" and "played at replacement level" are very
+different claims. A season where the player only appeared in one role
+counts the other role as 0.
+
+Note that WAR is not one single official formula -- Baseball
+Reference, FanGraphs, and MLB each compute it slightly differently.
+These are the MLB Stats API's own values, so expect small differences
+from bWAR/fWAR numbers you see elsewhere.
+
+
 COMBINING OPTIONS
 -----------------
 
@@ -303,6 +337,14 @@ TROUBLESHOOTING
      Check the spelling, e.g. "AL East", "NL Central". See "TEAM
      STANDINGS" above for the alias rules.
 
+"No MLB debut date found for player ID ..."
+     --war: the player has no MLB debut on record (e.g. a prospect
+     who hasn't played a major-league game yet).
+
+"No WAR data found in any season"
+     --war: the player debuted but the API has no WAR values for any
+     of their seasons.
+
 "No pitch data found for player ID ..."
      --velo: the player has games in the range but no tracked pitches
      -- most likely they're a position player, not a pitcher.
@@ -334,7 +376,8 @@ mlb_stats/stats.py   Registry of supported stats (STAT_CONFIGS). Each
                       change to support it.
 mlb_stats/api.py      API calls: find_player(), get_game_log(),
                       find_team(), get_team_schedule(), find_division(),
-                      get_division_standings(), get_game_pitches(),
+                      get_division_standings(), get_debut_year(),
+                      get_season_war(), get_game_pitches(),
                       get_league_team_stats(), get_primary_position()
 mlb_stats/war.py      Approximate per-game WAR (bwar/pwar): linear
                       weights, league baselines derived from team
@@ -351,6 +394,8 @@ mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       values for comparison mode), the standings
                       trio: build_standings_dataframe(),
                       format_standings_table(), plot_standings(),
+                      the career-WAR trio: build_war_dataframe(),
+                      format_war_table(), plot_career_war(),
                       and the pitch-velocity set:
                       filter_splits_by_date(), build_pitch_dataframe(),
                       format_pitch_table(), plot_pitch_velocities()

@@ -134,6 +134,45 @@ def get_primary_position(player_id: int) -> str:
 
 
 @ttl_cache(PLAYER_TTL_SECONDS)
+def get_debut_year(player_id: int) -> int:
+    """The year of a player's MLB debut, from their person record --
+    the first season a career-spanning view needs to consider."""
+    resp = requests.get(f"{BASE_URL}/people/{player_id}")
+    resp.raise_for_status()
+    people = resp.json().get("people", [])
+
+    debut = people[0].get("mlbDebutDate") if people else None
+    if not debut:
+        raise ValueError(f"No MLB debut date found for player ID {player_id}")
+
+    return int(debut[:4])
+
+
+@ttl_cache(GAME_LOG_TTL_SECONDS)
+def get_season_war(player_id: int, season: int, group: str) -> float | None:
+    """A player's WAR for one season and stat group ("hitting" or
+    "pitching"), from the API's sabermetrics stats. None -- not an
+    error -- when the player has no WAR for that season/group (didn't
+    play, or never appears in that group): a position player's missing
+    pitching WAR is a normal state, and the career view just treats it
+    as no contribution.
+
+    Season-level only: the API has no per-game or by-date-range WAR
+    (sabermetricsByDateRange is rejected), which is why the career view
+    plots one value per season rather than a within-season series like
+    the game-log stats."""
+    params: dict[str, str | int] = {"stats": "sabermetrics", "group": group, "season": season}
+    resp = requests.get(f"{BASE_URL}/people/{player_id}/stats", params=params)
+    resp.raise_for_status()
+
+    stats = resp.json().get("stats") or [{}]
+    splits = stats[0].get("splits", [])
+    if not splits:
+        return None
+    return splits[0].get("stat", {}).get("war")
+
+
+@ttl_cache(PLAYER_TTL_SECONDS)
 def _all_teams() -> list[dict[str, Any]]:
     resp = requests.get(f"{BASE_URL}/teams", params={"sportId": 1})
     resp.raise_for_status()

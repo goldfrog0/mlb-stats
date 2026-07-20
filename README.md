@@ -38,6 +38,7 @@ mlb-stats "Los Angeles Dodgers" --stat win_pct
 mlb-stats --standings "AL East" --table
 mlb-stats "Paul Skenes" --velo --start-date 2026-06-01 --end-date 2026-06-30
 mlb-stats "Shohei Ohtani" --stat bwar   # approximate per-game WAR
+mlb-stats "Shohei Ohtani" "Aaron Judge" --war   # official WAR, career by season
 ```
 
 See [HOW_TO_USE.txt](HOW_TO_USE.txt) for the full list of stats,
@@ -130,6 +131,7 @@ What lives where:
 | `tests/test_stats.py` | Stat-registry consistency, so a malformed new entry fails a test instead of crashing at runtime |
 | `tests/test_teams.py` | Team lookup (partial/city/abbreviation matching), schedule fetching, and flattening a schedule into win/loss + cumulative win% -- including the doubleheader (duplicate-date) regression |
 | `tests/test_standings.py` | Division lookup (AL/NL alias expansion, ambiguous matches), fetching a division's standings, and shaping them into a display-ready DataFrame |
+| `tests/test_war.py` | Career WAR: season WAR from the sabermetrics stats (missing = None, not an error), debut-year lookup, and the career DataFrame (missed seasons dropped, one-role seasons zero-filled, mixed-sign totals) |
 | `tests/test_velo.py` | Pitch velocities: flattening a game's play-by-play feed into pitches, date-range filtering, and the per-pitch DataFrame (dropping other pitchers' and untracked pitches) |
 | `tests/test_war_approx.py` | Approximate WAR: league wOBA/FIP baselines aggregated from team totals, hand-computed per-game batting/pitching WAR, positional adjustments, rolling-sum semantics |
 | `tests/test_api_groups.py` | The group=batting→hitting API translation regression (a two-way player's batting stats silently coming from their pitching log) |

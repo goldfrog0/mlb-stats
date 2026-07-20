@@ -312,6 +312,103 @@ function renderStandingsTable(divisionName, teams) {
   tableContainer.innerHTML = html;
 }
 
+// Career WAR: one stacked bar per season (batting + pitching -- both
+// matter for two-way players), grouped side by side when comparing two
+// players. Mirrors the CLI's plot_career_war. The grouping/stacking is
+// done manually (numeric x offsets, explicit widths, and a computed
+// "base" for the pitching segment) rather than with Plotly barmodes:
+// offsetgroup-based grouped stacks don't take effect in this Plotly
+// build, and manual placement handles the mixed-sign seasons the same
+// way the CLI does (each component spans its own contribution from 0
+// when signs differ).
+async function fetchCareerWar(player) {
+  const resp = await fetch(`/api/career-war?name=${encodeURIComponent(player)}`);
+  const payload = await resp.json();
+  if (!resp.ok) throw new Error(payload.detail || "Request failed");
+  return payload;
+}
+
+function buildWarTraces(payload, colors, xOffset, width, withName) {
+  const seasons = payload.seasons;
+  const prefix = withName ? `${payload.name} ` : "";
+  const x = seasons.map((s) => s.season + xOffset);
+  const pitchingBase = seasons.map((s) => (s.batting * s.pitching >= 0 ? s.batting : 0));
+  return [
+    {
+      x, y: seasons.map((s) => s.batting), width,
+      name: `${prefix}batting`, type: "bar",
+      marker: { color: colors.batting },
+      // text carries the un-offset season for hover; textposition "none"
+      // keeps Plotly from also printing it on the bars themselves.
+      text: seasons.map((s) => s.season), textposition: "none",
+      hovertemplate: "%{text}<br>%{y:.1f} batting WAR<extra>" + payload.name + "</extra>",
+    },
+    {
+      x, y: seasons.map((s) => s.pitching), width, base: pitchingBase,
+      name: `${prefix}pitching`, type: "bar",
+      marker: { color: colors.pitching },
+      text: seasons.map((s) => s.season), textposition: "none",
+      hovertemplate: "%{text}<br>%{y:.1f} pitching WAR<extra>" + payload.name + "</extra>",
+    },
+  ];
+}
+
+async function plotWar(player, player2) {
+  const payload1 = await fetchCareerWar(player);
+  const payload2 = player2 ? await fetchCareerWar(player2) : null;
+
+  let traces;
+  if (payload2 === null) {
+    traces = buildWarTraces(payload1, { batting: "steelblue", pitching: "darkorange" }, 0, 0.7, false);
+  } else {
+    traces = [
+      ...buildWarTraces(payload1, { batting: "crimson", pitching: "rgba(220,20,60,0.45)" }, -0.2, 0.38, true),
+      ...buildWarTraces(payload2, { batting: "steelblue", pitching: "rgba(70,130,180,0.45)" }, 0.2, 0.38, true),
+    ];
+  }
+
+  const title = payload2 === null
+    ? `${payload1.name} — WAR by Season`
+    : `${payload1.name} vs ${payload2.name} — WAR by Season`;
+
+  Plotly.newPlot(chartEl, traces, {
+    title,
+    barmode: "overlay",
+    xaxis: { title: "Season", dtick: 1 },
+    yaxis: { title: "WAR" },
+    legend: HORIZONTAL_LEGEND,
+    margin: { b: 110 },
+  }, { responsive: true });
+
+  renderWarTable([payload1, payload2].filter(Boolean));
+}
+
+function renderWarTable(payloads) {
+  if (!document.getElementById("showWarTable").checked) {
+    tableContainer.innerHTML = "";
+    return;
+  }
+
+  let html = "";
+  for (const { name, seasons } of payloads) {
+    html += `<h2>${name}</h2><table><thead><tr>
+      <th>Season</th><th>Batting</th><th>Pitching</th><th>Total</th>
+    </tr></thead><tbody>`;
+    const career = { batting: 0, pitching: 0, total: 0 };
+    for (const s of seasons) {
+      html += `<tr><td>${s.season}</td><td>${s.batting.toFixed(1)}</td>`
+            + `<td>${s.pitching.toFixed(1)}</td><td>${s.total.toFixed(1)}</td></tr>`;
+      career.batting += s.batting;
+      career.pitching += s.pitching;
+      career.total += s.total;
+    }
+    html += `<tr><td>Career</td><td>${career.batting.toFixed(1)}</td>`
+          + `<td>${career.pitching.toFixed(1)}</td><td>${career.total.toFixed(1)}</td></tr>`;
+    html += "</tbody></table>";
+  }
+  tableContainer.innerHTML = html;
+}
+
 async function plotSingle(player, stat, season, window, showCumulative) {
   const url = `/api/player?name=${encodeURIComponent(player)}&stat=${stat}&season=${season}&window=${window}`;
   const resp = await fetch(url);
@@ -462,19 +559,23 @@ function renderVeloTable(playerName, pitches, dates) {
 const modeButtons = document.querySelectorAll(".mode-btn");
 const statFields = document.getElementById("statFields");
 const standingsFields = document.getElementById("standingsFields");
+const warFields = document.getElementById("warFields");
 const veloFields = document.getElementById("veloFields");
 const player1Input = document.getElementById("player1");
+const warPlayerInput = document.getElementById("warPlayer");
 const veloPlayerInput = document.getElementById("veloPlayer");
 
 function setMode(mode) {
   modeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.mode === mode));
   statFields.hidden = mode !== "stats";
   standingsFields.hidden = mode !== "standings";
+  warFields.hidden = mode !== "war";
   veloFields.hidden = mode !== "velo";
   // A field's "required" doesn't reliably get exempted from constraint
   // validation just because an ancestor is hidden (browser-dependent),
   // so toggle it directly rather than relying on that.
   player1Input.required = mode === "stats";
+  warPlayerInput.required = mode === "war";
   veloPlayerInput.required = mode === "velo";
 }
 
@@ -491,6 +592,10 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
       const division = document.getElementById("division").value;
       const season = document.getElementById("standingsSeason").value;
       await plotStandings(division, season);
+    } else if (mode === "war") {
+      const player = document.getElementById("warPlayer").value.trim();
+      const player2 = document.getElementById("warPlayer2").value.trim();
+      await plotWar(player, player2);
     } else if (mode === "velo") {
       const player = document.getElementById("veloPlayer").value.trim();
       const season = document.getElementById("veloSeason").value;
@@ -564,6 +669,8 @@ function wireAutocomplete(inputId, datalistId) {
 
 wireAutocomplete("player1", "player1-suggestions");
 wireAutocomplete("player2", "player2-suggestions");
+wireAutocomplete("warPlayer", "warPlayer-suggestions");
+wireAutocomplete("warPlayer2", "warPlayer2-suggestions");
 wireAutocomplete("veloPlayer", "veloPlayer-suggestions");
 
 // Default the season inputs to the current year (the backend also falls

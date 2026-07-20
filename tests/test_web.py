@@ -100,6 +100,43 @@ class TestTeamStat:
         assert len(payload["player2"]["data"]) == 6
 
 
+class TestCareerWarEndpoint:
+    @pytest.fixture
+    def fake_war_api(self, monkeypatch, career_war_seasons):
+        war_by_season_group = {
+            (s["season"], group): s[key]
+            for s in career_war_seasons
+            for group, key in [("hitting", "batting"), ("pitching", "pitching")]
+        }
+        monkeypatch.setattr(web, "find_player", lambda name: (660271, f"Resolved {name}"))
+        monkeypatch.setattr(web, "get_debut_year", lambda pid: 2018)
+        monkeypatch.setattr(web, "get_season_war",
+                            lambda pid, season, group: war_by_season_group.get((season, group)))
+
+    def test_response_shape(self, fake_war_api) -> None:
+        resp = client.get("/api/career-war", params={"name": "Someone"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["name"] == "Resolved Someone"
+        # The fixture's fully-missed 2020 season must be dropped.
+        assert [s["season"] for s in payload["seasons"]] == [2018, 2019, 2021]
+        assert payload["seasons"][0] == {
+            "season": 2018, "batting": 2.7, "pitching": 1.1, "total": pytest.approx(3.8),
+        }
+
+    def test_unknown_player_is_404(self, monkeypatch) -> None:
+        def raise_not_found(name):
+            raise ValueError(f"No player found for '{name}'")
+
+        monkeypatch.setattr(web, "find_player", raise_not_found)
+        resp = client.get("/api/career-war", params={"name": "Zzz"})
+        assert resp.status_code == 404
+
+    def test_missing_name_is_a_validation_error(self) -> None:
+        resp = client.get("/api/career-war")
+        assert resp.status_code == 422
+
+
 class TestWarApproxStat:
     @pytest.fixture
     def fake_war_api(self, monkeypatch, batting_splits):
