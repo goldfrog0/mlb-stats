@@ -18,6 +18,7 @@
         <div class="mode-toggle">
           <button type="button" class="mode-btn active" data-mode="stats">Player / Team</button>
           <button type="button" class="mode-btn" data-mode="standings">Standings</button>
+          <button type="button" class="mode-btn" data-mode="velo">Pitch Velo</button>
         </div>
 
         <div id="statFields">
@@ -65,6 +66,32 @@
           </div>
           <div class="field checkbox compare-only">
             <label><input id="showDiff" type="checkbox"> Show diff panel</label>
+          </div>
+        </div>
+
+        <div id="veloFields" hidden>
+          <div class="field">
+            <label for="veloPlayer">Pitcher</label>
+            <input id="veloPlayer" type="text" placeholder="Paul Skenes"
+                   list="veloPlayer-suggestions" autocomplete="off">
+            <datalist id="veloPlayer-suggestions"></datalist>
+          </div>
+          <div class="field">
+            <label for="veloSeason">Season</label>
+            <input id="veloSeason" type="number">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="veloStart">From <span class="hint">(optional)</span></label>
+              <input id="veloStart" type="date">
+            </div>
+            <div class="field">
+              <label for="veloEnd">To <span class="hint">(optional)</span></label>
+              <input id="veloEnd" type="date">
+            </div>
+          </div>
+          <div class="field checkbox">
+            <label><input id="showVeloTable" type="checkbox"> Show per-game summary table</label>
           </div>
         </div>
 

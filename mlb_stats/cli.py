@@ -10,18 +10,23 @@ from mlb_stats.api import (
     find_team,
     get_division_standings,
     get_game_log,
+    get_game_pitches,
     get_league_team_stats,
     get_primary_position,
     get_team_schedule,
 )
 from mlb_stats.plots import (
     COMPARISON_LAYOUTS,
+    build_pitch_dataframe,
     build_stat_dataframe,
     build_standings_dataframe,
     build_team_win_dataframe,
     add_rolling_stat,
+    filter_splits_by_date,
+    format_pitch_table,
     format_standings_table,
     format_stat_table,
+    plot_pitch_velocities,
     plot_standings,
     plot_stat,
     plot_stat_comparison,
@@ -62,6 +67,19 @@ def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> 
     return df, full_name
 
 
+def _load_pitch_dataframe(
+    name: str, season: int, start_date: str | None, end_date: str | None,
+) -> tuple[pd.DataFrame, str]:
+    """Look up a pitcher, find their games in the date range from the
+    pitching game log, and pull each game's play-by-play pitch data."""
+    player_id, full_name = find_player(name)
+    splits = get_game_log(player_id, season, "pitching")
+    splits = filter_splits_by_date(splits, start_date, end_date)
+    games = [(s, get_game_pitches(s["game"]["gamePk"])) for s in splits]
+    df = build_pitch_dataframe(games, player_id)
+    return df, full_name
+
+
 def _load_standings_dataframe(division_name: str, season: int) -> tuple[pd.DataFrame, str]:
     division_id, full_name = find_division(division_name)
     team_records = get_division_standings(division_id, season)
@@ -87,6 +105,15 @@ def _auto_filename_single(player: str, stat: str, season: int, window: int) -> s
 
 def _auto_filename_standings(division_name: str, season: int) -> str:
     return f"{_slugify(division_name)}_standings_{season}_{_today_str()}.png"
+
+
+def _auto_filename_velo(player: str, season: int, start_date: str | None, end_date: str | None) -> str:
+    name = f"{_slugify(player)}_velo_{season}"
+    if start_date:
+        name += f"_from{start_date}"
+    if end_date:
+        name += f"_to{end_date}"
+    return f"{name}_{_today_str()}.png"
 
 
 def _auto_filename_compare(
@@ -123,6 +150,15 @@ def main() -> None:
                         help='Show a division\'s standings instead of plotting a player/team, '
                              'e.g. --standings "AL East". Ignores player/player2/--stat; '
                              "--season, --save, and --table still apply")
+    parser.add_argument("--velo", action="store_true",
+                        help="Plot every pitch's release velocity as a dot column per game, "
+                             "colored by pitch type, with a line tracing each game's max velo. "
+                             "The player must be a pitcher; player2/--stat/--window don't apply. "
+                             "--season, --save, --table, and --start-date/--end-date all work")
+    parser.add_argument("--start-date", type=str, default=None, metavar="YYYY-MM-DD",
+                        help="--velo only: skip games before this date (inclusive)")
+    parser.add_argument("--end-date", type=str, default=None, metavar="YYYY-MM-DD",
+                        help="--velo only: skip games after this date (inclusive)")
     parser.add_argument("--season", type=int, default=CURRENT_YEAR, help=f"Season year (default: {CURRENT_YEAR})")
     parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
                         help=f"Rolling average window (default: {DEFAULT_WINDOW})")
@@ -147,6 +183,10 @@ def main() -> None:
 
     if not args.standings and not args.player:
         parser.error("player is required unless --standings is given")
+    if args.velo and args.player2:
+        parser.error("--velo plots a single pitcher; a second player is not supported")
+    if (args.start_date or args.end_date) and not args.velo:
+        parser.error("--start-date/--end-date only apply to --velo")
 
     try:
         if args.standings:
@@ -162,6 +202,19 @@ def main() -> None:
                 save_path = _auto_filename_standings(division_name, args.season)
 
             plot_standings(df, division_name, args.season, save_path=save_path)
+        elif args.velo:
+            df, full_name = _load_pitch_dataframe(args.player, args.season, args.start_date, args.end_date)
+
+            if args.table:
+                print(f"\n{full_name}")
+                print("-" * len(full_name))
+                print(format_pitch_table(df))
+
+            save_path = args.save
+            if save_path == AUTO_SAVE:
+                save_path = _auto_filename_velo(full_name, args.season, args.start_date, args.end_date)
+
+            plot_pitch_velocities(df, full_name, args.season, save_path=save_path)
         elif args.player2:
             df1, name1 = _load_stat_dataframe(args.player, args.season, args.stat, args.window)
             df2, name2 = _load_stat_dataframe(args.player2, args.season, args.stat, args.window)

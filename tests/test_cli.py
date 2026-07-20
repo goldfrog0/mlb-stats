@@ -167,6 +167,47 @@ class TestMain:
         cli.main()
         assert out.exists() and out.stat().st_size > 0
 
+    def test_velo_saves_chart_and_prints_summary_table(
+        self, monkeypatch, tmp_path, velo_game_splits, game_pitches_by_pk, capsys,
+    ) -> None:
+        monkeypatch.setattr(cli, "find_player", lambda name: (694973, "Test Pitcher"))
+        monkeypatch.setattr(cli, "get_game_log", lambda pid, season, group: velo_game_splits)
+        monkeypatch.setattr(cli, "get_game_pitches", lambda pk: game_pitches_by_pk[pk])
+        out = tmp_path / "velo.png"
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Test Pitcher", "--velo", "--table", "--save", str(out)])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+        printed = capsys.readouterr().out
+        assert "max_velo" in printed
+        assert "Opponent A" in printed
+
+    def test_velo_date_range_narrows_the_games(
+        self, monkeypatch, tmp_path, velo_game_splits, game_pitches_by_pk, capsys,
+    ) -> None:
+        monkeypatch.setattr(cli, "find_player", lambda name: (694973, "Test Pitcher"))
+        monkeypatch.setattr(cli, "get_game_log", lambda pid, season, group: velo_game_splits)
+        monkeypatch.setattr(cli, "get_game_pitches", lambda pk: game_pitches_by_pk[pk])
+        monkeypatch.setattr("sys.argv", [
+            "mlb-stats", "Test Pitcher", "--velo", "--start-date", "2026-06-02",
+            "--table", "--save", str(tmp_path / "v.png"),
+        ])
+        cli.main()
+        printed = capsys.readouterr().out
+        assert "Opponent B" in printed
+        assert "Opponent A" not in printed
+
+    def test_date_range_without_velo_is_a_usage_error(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Someone", "--start-date", "2026-06-01"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 2
+
+    def test_velo_with_second_player_is_a_usage_error(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Someone", "Someone Else", "--velo"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 2
+
     def test_no_player_and_no_standings_is_a_usage_error(self, monkeypatch) -> None:
         monkeypatch.setattr("sys.argv", ["mlb-stats"])
         with pytest.raises(SystemExit) as excinfo:
