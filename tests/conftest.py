@@ -182,22 +182,6 @@ def game_pitches_by_pk() -> dict[int, list[dict[str, Any]]]:
 
 
 @pytest.fixture
-def career_war_seasons() -> list[dict[str, Any]]:
-    """Per-season WAR rows as _load_war_dataframe assembles them (one
-    per season from debut on, either component possibly None). Covers a
-    two-way season, a batting-only season, a fully missed season (both
-    None -- must be dropped, not shown as zero), and a mixed-sign
-    season. Hand-checked totals: 3.8, 1.6, (dropped), 1.5; career
-    batting 3.8, pitching 3.1, total 6.9."""
-    return [
-        {"season": 2018, "batting": 2.7, "pitching": 1.1},
-        {"season": 2019, "batting": 1.6, "pitching": None},
-        {"season": 2020, "batting": None, "pitching": None},
-        {"season": 2021, "batting": -0.5, "pitching": 2.0},
-    ]
-
-
-@pytest.fixture
 def division_team_records() -> list[dict[str, Any]]:
     """Four teams' standings records, in the shape /standings returns
     them (already ranked best-to-worst, matching real AL East data used

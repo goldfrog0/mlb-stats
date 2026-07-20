@@ -18,7 +18,6 @@
         <div class="mode-toggle">
           <button type="button" class="mode-btn active" data-mode="stats">Player / Team</button>
           <button type="button" class="mode-btn" data-mode="standings">Standings</button>
-          <button type="button" class="mode-btn" data-mode="war">Career WAR</button>
           <button type="button" class="mode-btn" data-mode="velo">Pitch Velo</button>
         </div>
 
@@ -70,21 +69,6 @@
           </div>
         </div>
 
-        <div id="warFields" hidden>
-          <div class="field">
-            <label for="warPlayer">Player</label>
-            <input id="warPlayer" type="text" placeholder="Shohei Ohtani"
-                   list="warPlayer-suggestions" autocomplete="off">
-            <datalist id="warPlayer-suggestions"></datalist>
-          </div>
-          <div class="field">
-            <label for="warPlayer2">Compare against <span class="hint">(optional)</span></label>
-            <input id="warPlayer2" type="text" placeholder="Aaron Judge"
-                   list="warPlayer2-suggestions" autocomplete="off">
-            <datalist id="warPlayer2-suggestions"></datalist>
-          </div>
-          <div class="field checkbox">
-            <label><input id="showWarTable" type="checkbox"> Show data table</label>
         <div id="veloFields" hidden>
           <div class="field">
             <label for="veloPlayer">Pitcher</label>

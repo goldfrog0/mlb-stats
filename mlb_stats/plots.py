@@ -155,49 +155,6 @@ def build_standings_dataframe(team_records: list[dict[str, Any]]) -> pd.DataFram
     return pd.DataFrame(rows).sort_values("rank").reset_index(drop=True)
 
 
-def build_war_dataframe(seasons: list[dict[str, Any]]) -> pd.DataFrame:
-    """Shape per-season WAR values into a career DataFrame: one row per
-    season with batting, pitching, and total WAR. Input rows carry
-    {"season", "batting", "pitching"} where either component may be
-    None (no appearances in that group that season) -- treated as a 0.0
-    contribution. Seasons where BOTH are None (no MLB time at all, e.g.
-    a year lost to injury) are dropped entirely rather than shown as a
-    zero, since "didn't play" and "played at replacement level" are
-    very different claims."""
-    kept = [s for s in seasons if s["batting"] is not None or s["pitching"] is not None]
-    if not kept:
-        raise ValueError("No WAR data found in any season")
-
-    df = pd.DataFrame([
-        {
-            "season": s["season"],
-            "batting": s["batting"] or 0.0,
-            "pitching": s["pitching"] or 0.0,
-        }
-        for s in kept
-    ]).sort_values("season").reset_index(drop=True)
-    df["total"] = df["batting"] + df["pitching"]
-    return df
-
-
-def format_war_table(df: pd.DataFrame) -> str:
-    """Render a career WAR DataFrame as a plain aligned text table, with
-    a career-totals row at the bottom."""
-    table = df.rename(columns={
-        "season": "Season", "batting": "Batting", "pitching": "Pitching", "total": "Total",
-    }).copy()
-    career = pd.DataFrame([{
-        "Season": "Career",
-        "Batting": table["Batting"].sum(),
-        "Pitching": table["Pitching"].sum(),
-        "Total": table["Total"].sum(),
-    }])
-    table = pd.concat([table, career], ignore_index=True)
-    for column in ("Batting", "Pitching", "Total"):
-        table[column] = table[column].round(1)
-    return table.to_string(index=False)
-
-
 def filter_splits_by_date(
     splits: list[dict[str, Any]], start_date: str | None = None, end_date: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -504,67 +461,6 @@ def plot_stat_comparison(
     if diff_ax is not None:
         _draw_diff_panel(diff_ax, df1, name1, df2, name2, color1, color2, label)
 
-    plt.tight_layout()
-    _finish_plot(save_path)
-
-
-def _draw_war_bars(
-    df: pd.DataFrame, x: pd.Series, width: float, batting_color: str, pitching_color: str,
-    batting_label: str, pitching_label: str, pitching_alpha: float = 1.0,
-) -> None:
-    """One stacked bar per season: batting WAR from zero, pitching WAR
-    stacked on top. When the two components have opposite signs the
-    pitching bar starts from zero instead, so each component's bar
-    always spans its own contribution (a strict stack would paint one
-    on top of the other)."""
-    same_sign = (df["batting"] * df["pitching"]) >= 0
-    pitching_bottom = df["batting"].where(same_sign, 0.0)
-
-    plt.bar(x, df["batting"], width=width, color=batting_color, label=batting_label)
-    plt.bar(x, df["pitching"], width=width, bottom=pitching_bottom,
-            color=pitching_color, alpha=pitching_alpha, label=pitching_label)
-
-
-def plot_career_war(
-    df1: pd.DataFrame,
-    name1: str,
-    df2: pd.DataFrame | None = None,
-    name2: str | None = None,
-    save_path: str | None = None,
-) -> None:
-    """Render career WAR: one stacked bar per season (batting + pitching
-    WAR -- both matter for two-way players; everyone else's bar is
-    effectively one color), annotated with the season's total. With a
-    second player, each season shows the two players' bars side by
-    side."""
-    all_seasons = sorted(set(df1["season"]) | (set(df2["season"]) if df2 is not None else set()))
-    plt.figure(figsize=(max(9.0, 0.9 * len(all_seasons) + 3), 5.5))
-
-    if df2 is None:
-        _draw_war_bars(df1, df1["season"], 0.7, "steelblue", "darkorange",
-                       "Batting WAR", "Pitching WAR")
-        annotated = [df1]
-    else:
-        _draw_war_bars(df1, df1["season"] - 0.2, 0.38, "crimson", "crimson",
-                       f"{name1} batting", f"{name1} pitching", pitching_alpha=0.45)
-        _draw_war_bars(df2, df2["season"] + 0.2, 0.38, "steelblue", "steelblue",
-                       f"{name2} batting", f"{name2} pitching", pitching_alpha=0.45)
-        annotated = []  # per-bar totals get too crowded with two players
-
-    for df in annotated:
-        for _, row in df.iterrows():
-            above = row["total"] >= 0
-            plt.annotate(f"{row['total']:.1f}", (row["season"], row["total"]),
-                         ha="center", va="bottom" if above else "top", fontsize=9,
-                         xytext=(0, 3 if above else -3), textcoords="offset points")
-
-    plt.axhline(0, color="gray", linewidth=1)
-    plt.xticks(all_seasons)
-    plt.xlabel("Season")
-    plt.ylabel("WAR")
-    title = f"{name1} — WAR by Season" if df2 is None else f"{name1} vs {name2} — WAR by Season"
-    plt.title(title)
-    plt.legend()
     plt.tight_layout()
     _finish_plot(save_path)
 

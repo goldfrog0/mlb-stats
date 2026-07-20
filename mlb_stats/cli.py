@@ -8,29 +8,24 @@ from mlb_stats.api import (
     find_division,
     find_player,
     find_team,
-    get_debut_year,
     get_division_standings,
     get_game_log,
     get_game_pitches,
     get_league_team_stats,
     get_primary_position,
-    get_season_war,
     get_team_schedule,
 )
 from mlb_stats.plots import (
     COMPARISON_LAYOUTS,
     build_pitch_dataframe,
-    build_standings_dataframe,
     build_stat_dataframe,
+    build_standings_dataframe,
     build_team_win_dataframe,
-    build_war_dataframe,
     add_rolling_stat,
     filter_splits_by_date,
     format_pitch_table,
     format_standings_table,
     format_stat_table,
-    format_war_table,
-    plot_career_war,
     plot_pitch_velocities,
     plot_standings,
     plot_stat,
@@ -72,24 +67,6 @@ def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> 
     return df, full_name
 
 
-def _load_war_dataframe(name: str) -> tuple[pd.DataFrame, str]:
-    """Look up a player and pull their WAR for every season from their
-    MLB debut through the current year (one API call per season and
-    group, all cached)."""
-    player_id, full_name = find_player(name)
-    debut_year = get_debut_year(player_id)
-    seasons = [
-        {
-            "season": season,
-            "batting": get_season_war(player_id, season, "hitting"),
-            "pitching": get_season_war(player_id, season, "pitching"),
-        }
-        for season in range(debut_year, CURRENT_YEAR + 1)
-    ]
-    df = build_war_dataframe(seasons)
-    return df, full_name
-
-
 def _load_pitch_dataframe(
     name: str, season: int, start_date: str | None, end_date: str | None,
 ) -> tuple[pd.DataFrame, str]:
@@ -128,13 +105,6 @@ def _auto_filename_single(player: str, stat: str, season: int, window: int) -> s
 
 def _auto_filename_standings(division_name: str, season: int) -> str:
     return f"{_slugify(division_name)}_standings_{season}_{_today_str()}.png"
-
-
-def _auto_filename_war(player1: str, player2: str | None) -> str:
-    name = _slugify(player1)
-    if player2:
-        name += f"_vs_{_slugify(player2)}"
-    return f"{name}_war_career_{_today_str()}.png"
 
 
 def _auto_filename_velo(player: str, season: int, start_date: str | None, end_date: str | None) -> str:
@@ -180,12 +150,6 @@ def main() -> None:
                         help='Show a division\'s standings instead of plotting a player/team, '
                              'e.g. --standings "AL East". Ignores player/player2/--stat; '
                              "--season, --save, and --table still apply")
-    parser.add_argument("--war", action="store_true",
-                        help="Plot career WAR by season (batting + pitching stacked into total) "
-                             "instead of a game-by-game stat. Works with an optional second "
-                             "player for side-by-side bars; --save and --table apply. --stat/"
-                             "--window/--season don't (WAR is only available season-by-season "
-                             "from the API, so this always spans debut year through today)")
     parser.add_argument("--velo", action="store_true",
                         help="Plot every pitch's release velocity as a dot column per game, "
                              "colored by pitch type, with a line tracing each game's max velo. "
@@ -219,10 +183,6 @@ def main() -> None:
 
     if not args.standings and not args.player:
         parser.error("player is required unless --standings is given")
-    if args.war and args.standings:
-        parser.error("--war and --standings are mutually exclusive")
-    if args.war and args.velo:
-        parser.error("--war and --velo are mutually exclusive")
     if args.velo and args.player2:
         parser.error("--velo plots a single pitcher; a second player is not supported")
     if (args.start_date or args.end_date) and not args.velo:
@@ -242,26 +202,6 @@ def main() -> None:
                 save_path = _auto_filename_standings(division_name, args.season)
 
             plot_standings(df, division_name, args.season, save_path=save_path)
-        elif args.war:
-            df1, name1 = _load_war_dataframe(args.player)
-            df2, name2 = (None, None)
-            if args.player2:
-                df2, name2 = _load_war_dataframe(args.player2)
-
-            if args.table:
-                tables = [(name1, df1)]
-                if df2 is not None and name2 is not None:
-                    tables.append((name2, df2))
-                for name, df in tables:
-                    print(f"\n{name}")
-                    print("-" * len(name))
-                    print(format_war_table(df))
-
-            save_path = args.save
-            if save_path == AUTO_SAVE:
-                save_path = _auto_filename_war(name1, name2)
-
-            plot_career_war(df1, name1, df2, name2, save_path=save_path)
         elif args.velo:
             df, full_name = _load_pitch_dataframe(args.player, args.season, args.start_date, args.end_date)
 
