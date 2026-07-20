@@ -1,5 +1,6 @@
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
@@ -197,6 +198,68 @@ def format_war_table(df: pd.DataFrame) -> str:
     return table.to_string(index=False)
 
 
+def filter_splits_by_date(
+    splits: list[dict[str, Any]], start_date: str | None = None, end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    """Keep only the game-log splits within [start_date, end_date]
+    (inclusive, ISO "YYYY-MM-DD" strings, either side optional). ISO
+    date strings compare lexicographically in chronological order, so
+    plain string comparison is correct here."""
+    kept = [
+        s for s in splits
+        if (start_date is None or s["date"] >= start_date)
+        and (end_date is None or s["date"] <= end_date)
+    ]
+    if not kept:
+        window = f"{start_date or 'season start'} and {end_date or 'season end'}"
+        raise ValueError(f"No games found between {window}")
+    return kept
+
+
+def build_pitch_dataframe(
+    games: list[tuple[dict[str, Any], list[dict[str, Any]]]], pitcher_id: int,
+) -> pd.DataFrame:
+    """Flatten (game-log split, that game's pitches) pairs into one row
+    per pitch thrown by pitcher_id: date, opponent, pitch_type, velo.
+
+    Unlike the stat DataFrames, `date` stays an ISO string: the velocity
+    chart treats each game as a categorical column rather than a point
+    on a continuous time axis, so no date arithmetic is ever needed.
+    Pitches with no tracked velocity are dropped."""
+    rows = [
+        {
+            "date": split["date"],
+            "opponent": split["opponent"]["name"],
+            "pitch_type": pitch["pitch_type"],
+            "velo": pitch["velo"],
+        }
+        for split, pitches in games
+        for pitch in pitches
+        if pitch["pitcher_id"] == pitcher_id and pitch["velo"] is not None
+    ]
+
+    if not rows:
+        raise ValueError(f"No pitch data found for player ID {pitcher_id}")
+
+    return pd.DataFrame(rows).sort_values("date", kind="stable").reset_index(drop=True)
+
+
+def format_pitch_table(df: pd.DataFrame) -> str:
+    """Render a per-game summary of the pitch velocities behind the
+    chart (one row per game, not per pitch -- a full season is thousands
+    of pitches)."""
+    grouped = df.groupby("date", sort=True)
+    table = pd.DataFrame({
+        "date": grouped["date"].first(),
+        "opponent": grouped["opponent"].first(),
+        "pitches": grouped["velo"].count(),
+        "max_velo": grouped["velo"].max().round(1),
+        "median_velo": grouped["velo"].median().round(1),
+        "min_velo": grouped["velo"].min().round(1),
+    })
+    return table.to_string(index=False)
+
+
 def format_standings_table(df: pd.DataFrame) -> str:
     """Render a division's standings as a plain aligned text table."""
     table = df.rename(columns={
@@ -209,6 +272,11 @@ def format_standings_table(df: pd.DataFrame) -> str:
 
 def _rolling_value_for_stat(df: pd.DataFrame, stat_key: str, window: int) -> pd.Series:
     config = get_stat_config(stat_key)
+    if config.get("computation") == "war_approx":
+        # WAR is a counting stat, not a rate: the rolling value is WAR
+        # accumulated over the last N games (a rolling sum), not a
+        # numerator/denominator recomputation.
+        return df["war_game"].rolling(window=window).sum()
     if "composite_of" in config:
         return sum(_rolling_value_for_stat(df, component, window) for component in config["composite_of"])
 
@@ -233,6 +301,8 @@ def compute_game_value(df: pd.DataFrame, stat_key: str) -> pd.Series:
     """This game's own value of stat_key (not season-cumulative or
     rolling), computed from that row's own numerator/denominator fields."""
     config = get_stat_config(stat_key)
+    if config.get("computation") == "war_approx":
+        return df["war_game"]
     if "composite_of" in config:
         return sum(compute_game_value(df, component) for component in config["composite_of"])
     numerator = _weighted_numerator(df, config["numerator_fields"])
@@ -495,6 +565,40 @@ def plot_career_war(
     title = f"{name1} — WAR by Season" if df2 is None else f"{name1} vs {name2} — WAR by Season"
     plt.title(title)
     plt.legend()
+    plt.tight_layout()
+    _finish_plot(save_path)
+
+
+def plot_pitch_velocities(
+    df: pd.DataFrame, player_name: str, season: int, save_path: str | None = None,
+) -> None:
+    """Render every pitch as a dot, one column of dots per game (jittered
+    horizontally so same-speed pitches don't stack into a single point),
+    colored by pitch type, with a dashed line tracing each game's max
+    velocity across the stretch."""
+    dates = sorted(df["date"].unique())
+    x_by_date = {date: i for i, date in enumerate(dates)}
+
+    fig_width = max(11.0, 1.1 * len(dates) + 3)
+    plt.figure(figsize=(fig_width, 6))
+
+    # Seeded so repeated runs of the same command produce the same image.
+    rng = np.random.default_rng(0)
+    for pitch_type, group in df.groupby("pitch_type"):
+        x = group["date"].map(x_by_date) + rng.uniform(-0.28, 0.28, len(group))
+        plt.scatter(x, group["velo"], s=14, alpha=0.6, label=pitch_type)
+
+    game_max = df.groupby("date")["velo"].max().reindex(dates)
+    plt.plot(range(len(dates)), game_max, color="black", linewidth=1,
+             linestyle="--", marker="_", markersize=14, label="Game max")
+
+    plt.xticks(range(len(dates)), dates, rotation=45)
+    plt.xlabel("Game date")
+    plt.ylabel("Velocity (mph)")
+    plt.title(f"{player_name} — Pitch Velocities by Game ({season} Season)")
+    # Outside the axes: the dot columns fill the plot area edge to edge,
+    # so any in-plot legend position would cover data.
+    plt.legend(loc="center left", bbox_to_anchor=(1.01, 0.5))
     plt.tight_layout()
     _finish_plot(save_path)
 

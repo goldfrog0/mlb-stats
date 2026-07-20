@@ -20,19 +20,25 @@ from mlb_stats.api import (
     get_debut_year,
     get_division_standings,
     get_game_log,
+    get_game_pitches,
+    get_league_team_stats,
+    get_primary_position,
     get_season_war,
     get_team_schedule,
     search_players,
 )
 from mlb_stats.plots import (
+    build_pitch_dataframe,
     build_standings_dataframe,
     build_stat_dataframe,
     build_team_win_dataframe,
     build_war_dataframe,
     add_rolling_stat,
     compute_game_value,
+    filter_splits_by_date,
 )
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
+from mlb_stats.war import build_war_approx_dataframe, league_fip, league_woba, position_adjustment
 
 app = FastAPI(title="MLB Stats")
 
@@ -60,6 +66,17 @@ def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> 
         team_id, full_name = find_team(name)
         games = get_team_schedule(team_id, season)
         df = build_team_win_dataframe(games, team_id)
+    elif config.get("computation") == "war_approx":
+        player_id, full_name = find_player(name)
+        splits = get_game_log(player_id, season, config["group"])
+        team_totals = get_league_team_stats(season, config["group"])
+        if config["group"] == "batting":
+            baseline = league_woba(team_totals)
+            pos_adj = position_adjustment(get_primary_position(player_id))
+        else:
+            baseline = league_fip(team_totals)
+            pos_adj = 0.0
+        df = build_war_approx_dataframe(splits, config["group"], baseline, pos_adj)
     else:
         player_id, full_name = find_player(name)
         splits = get_game_log(player_id, season, config["group"])
@@ -142,6 +159,26 @@ def career_war(name: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(e))
 
     return {"name": full_name, "seasons": df.to_dict(orient="records")}
+
+
+@app.get("/api/pitch-velocities")
+def pitch_velocities(
+    name: str, season: int | None = None, start: str | None = None, end: str | None = None,
+) -> dict[str, Any]:
+    """Every pitch a pitcher threw in the date range, one record per
+    pitch (date, opponent, pitch_type, velo). The frontend does its own
+    per-game grouping, so no rolling/serialization machinery applies --
+    dates are already plain ISO strings in the pitch DataFrame."""
+    try:
+        player_id, full_name = find_player(name)
+        splits = get_game_log(player_id, season or _current_season(), "pitching")
+        splits = filter_splits_by_date(splits, start, end)
+        games = [(s, get_game_pitches(s["game"]["gamePk"])) for s in splits]
+        df = build_pitch_dataframe(games, player_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {"name": full_name, "pitches": df.to_dict(orient="records")}
 
 
 @app.get("/api/standings")

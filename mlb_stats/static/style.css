@@ -53,6 +53,7 @@ body {
 
 #statFields,
 #standingsFields,
+#veloFields,
 #warFields {
   display: flex;
   flex-direction: column;
@@ -64,17 +65,20 @@ body {
    leaving every field group visible at once regardless of mode. */
 #statFields[hidden],
 #standingsFields[hidden],
+#veloFields[hidden],
 #warFields[hidden] {
   display: none;
 }
 
 .mode-toggle {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
 .mode-btn {
-  flex: 1;
+  /* 45% basis so four buttons wrap into a 2x2 grid in the sidebar */
+  flex: 1 1 45%;
   padding: 0.45rem 0.5rem;
   background: var(--bg);
   color: var(--text-muted);

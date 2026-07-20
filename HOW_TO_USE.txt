@@ -45,12 +45,14 @@ Pitching:
   k9     Strikeouts per 9 innings
   bb9    Walks per 9 innings
   fip    Fielding Independent Pitching
+  pwar   Pitching WAR, approximate (see "A note on bwar/pwar" below)
 
 Batting:
   avg    Batting average
   obp    On-base percentage
   slg    Slugging percentage
   ops    On-base Plus Slugging (obp + slg)
+  bwar   Batting WAR, approximate (see "A note on bwar/pwar" below)
 
 Team:
   win_pct  Win percentage over the season
@@ -76,6 +78,26 @@ will be close but not perfectly official.
 
 A note on win_pct: also computed locally rather than from the API's
 own (pre-rounded) season record, for full precision.
+
+A note on bwar/pwar: the MLB API only reports WAR as a season-level
+snapshot -- there is no per-game WAR anywhere -- so these are computed
+locally, per game, from box-score counting stats using fWAR-style
+formulas: batting from wOBA linear weights plus replacement-level and
+positional adjustments; pitching from FIP plus replacement level.
+League baselines (league wOBA/FIP) are derived from all 30 teams'
+season totals with the same formulas, so nothing is hardcoded per
+season. What a box score can't see is left out: park factors,
+fielding, and baserunning. Validated against the API's official
+season WAR: pitchers land within about +/-0.3; bat-first hitters
+within about 0.2-0.8 (slightly low); elite defenders/baserunners read
+low by roughly their defensive value (~2 WAR for a Gold Glove
+shortstop) since this is essentially offense-only WAR. Treat the
+shape of the line as trustworthy and the level as approximate.
+
+Also note: since WAR is a counting stat rather than a rate, the
+"rolling" line for bwar/pwar is WAR ACCUMULATED over the last
+--window games (a rolling total), even where chart titles say
+"average"; the cumulative line is the running season total.
 
 
 COMPARING TWO PLAYERS (OR TEAMS)
@@ -197,6 +219,33 @@ OPTIONS
      gap you'll see at the start of the rolling line on the chart.
 
 
+PITCH VELOCITIES (--velo)
+---------------------------
+
+Instead of a stat over time, plot every single pitch a pitcher threw:
+one column of dots per game (colored by pitch type), with a dashed
+line tracing each game's max velocity across the stretch -- so both a
+pitcher's velocity distribution and their max velo trend are visible
+at a glance:
+
+     mlb-stats "Paul Skenes" --velo
+     mlb-stats "Paul Skenes" --velo --start-date 2026-06-01 --end-date 2026-06-30
+     mlb-stats "Paul Skenes" --velo --table --save
+
+The player must be a pitcher. --start-date/--end-date (inclusive,
+YYYY-MM-DD, either side optional) narrow the plot to a stretch of the
+season -- e.g. one month, as above. --season and --save work as usual;
+--table prints a per-game summary (pitch count, max/median/min velo)
+rather than one row per pitch. --stat, --window, and the comparison
+options don't apply, and a second player isn't supported.
+
+Unlike the game-log stats, this pulls each game's full play-by-play
+feed (one extra API call per game, cached for 24 hours -- a completed
+game's pitches never change). The velocity is the pitch's release
+speed ("startSpeed") as tracked by MLB's Statcast system; on the rare
+pitch the tracking missed, that pitch is simply omitted.
+
+
 TEAM STANDINGS (--standings)
 ------------------------------
 
@@ -296,6 +345,14 @@ TROUBLESHOOTING
      --war: the player debuted but the API has no WAR values for any
      of their seasons.
 
+"No pitch data found for player ID ..."
+     --velo: the player has games in the range but no tracked pitches
+     -- most likely they're a position player, not a pitcher.
+
+"No games found between ... and ..."
+     --velo: no games in the --start-date/--end-date range. Check the
+     dates are YYYY-MM-DD and fall within the season.
+
 "Multiple matches, using: ..."
      Just a heads up — the name (or team) search found more than one
      match and picked the first one. Use a more specific name if it
@@ -320,7 +377,12 @@ mlb_stats/stats.py   Registry of supported stats (STAT_CONFIGS). Each
 mlb_stats/api.py      API calls: find_player(), get_game_log(),
                       find_team(), get_team_schedule(), find_division(),
                       get_division_standings(), get_debut_year(),
-                      get_season_war()
+                      get_season_war(), get_game_pitches(),
+                      get_league_team_stats(), get_primary_position()
+mlb_stats/war.py      Approximate per-game WAR (bwar/pwar): linear
+                      weights, league baselines derived from team
+                      totals, positional adjustment, and
+                      build_war_approx_dataframe()
 mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       build_team_win_dataframe() (flattens a team
                       schedule into the same shape build_stat_dataframe
@@ -332,8 +394,11 @@ mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       values for comparison mode), the standings
                       trio: build_standings_dataframe(),
                       format_standings_table(), plot_standings(),
-                      and the career-WAR trio: build_war_dataframe(),
-                      format_war_table(), plot_career_war()
+                      the career-WAR trio: build_war_dataframe(),
+                      format_war_table(), plot_career_war(),
+                      and the pitch-velocity set:
+                      filter_splits_by_date(), build_pitch_dataframe(),
+                      format_pitch_table(), plot_pitch_velocities()
 mlb_stats/cli.py      Argument parsing / entry point (main())
 
 Data source: MLB Stats API (https://statsapi.mlb.com) — public,

@@ -137,6 +137,74 @@ class TestCareerWarEndpoint:
         assert resp.status_code == 422
 
 
+class TestWarApproxStat:
+    @pytest.fixture
+    def fake_war_api(self, monkeypatch, batting_splits):
+        league = [{"atBats": 100, "hits": 25, "doubles": 5, "triples": 1, "homeRuns": 3,
+                   "baseOnBalls": 10, "intentionalWalks": 1, "hitByPitch": 2, "sacFlies": 2}]
+        monkeypatch.setattr(web, "find_player", lambda name: (660271, f"Resolved {name}"))
+        monkeypatch.setattr(web, "get_game_log", lambda pid, season, group: batting_splits)
+        monkeypatch.setattr(web, "get_league_team_stats", lambda season, group: league)
+        monkeypatch.setattr(web, "get_primary_position", lambda pid: "DH")
+
+    def test_bwar_flows_through_the_player_endpoint(self, fake_war_api) -> None:
+        resp = client.get("/api/player", params={"name": "Someone", "stat": "bwar"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["label"] == "Batting WAR (approx)"
+        assert len(payload["data"]) == 6
+        # Standard serialized shape, so the frontend needs no changes.
+        assert set(payload["data"][0]) == {"date", "opponent", "game", "cumulative", "rolling"}
+
+    def test_bwar_listed_in_stats(self) -> None:
+        stats = client.get("/api/stats").json()
+        assert stats["bwar"] == {"label": "Batting WAR (approx)", "group": "batting"}
+        assert stats["pwar"] == {"label": "Pitching WAR (approx)", "group": "pitching"}
+
+
+class TestPitchVelocitiesEndpoint:
+    @pytest.fixture
+    def fake_velo_api(self, monkeypatch, velo_game_splits, game_pitches_by_pk):
+        monkeypatch.setattr(web, "find_player", lambda name: (694973, f"Resolved {name}"))
+        monkeypatch.setattr(web, "get_game_log", lambda pid, season, group: velo_game_splits)
+        monkeypatch.setattr(web, "get_game_pitches", lambda pk: game_pitches_by_pk[pk])
+
+    def test_response_shape(self, fake_velo_api) -> None:
+        resp = client.get("/api/pitch-velocities", params={"name": "Someone"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["name"] == "Resolved Someone"
+        # 7 fixture pitches, minus one by another pitcher, minus one untracked.
+        assert len(payload["pitches"]) == 5
+        assert payload["pitches"][0] == {
+            "date": "2026-06-01", "opponent": "Opponent A",
+            "pitch_type": "Four-Seam Fastball", "velo": 97.0,
+        }
+
+    def test_date_range_narrows_the_games(self, fake_velo_api) -> None:
+        resp = client.get("/api/pitch-velocities", params={"name": "Someone", "start": "2026-06-02"})
+        assert resp.status_code == 200
+        pitches = resp.json()["pitches"]
+        assert {p["date"] for p in pitches} == {"2026-06-06"}
+
+    def test_empty_date_range_is_404(self, fake_velo_api) -> None:
+        resp = client.get("/api/pitch-velocities", params={"name": "Someone", "start": "2027-01-01"})
+        assert resp.status_code == 404
+        assert "No games found" in resp.json()["detail"]
+
+    def test_unknown_player_is_404(self, monkeypatch) -> None:
+        def raise_not_found(name):
+            raise ValueError(f"No player found for '{name}'")
+
+        monkeypatch.setattr(web, "find_player", raise_not_found)
+        resp = client.get("/api/pitch-velocities", params={"name": "Zzz"})
+        assert resp.status_code == 404
+
+    def test_missing_name_is_a_validation_error(self) -> None:
+        resp = client.get("/api/pitch-velocities")
+        assert resp.status_code == 422
+
+
 class TestStandingsEndpoint:
     @pytest.fixture
     def fake_standings_api(self, monkeypatch, division_team_records):
