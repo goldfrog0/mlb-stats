@@ -217,6 +217,52 @@ def format_pitch_table(df: pd.DataFrame) -> str:
     return table.to_string(index=False)
 
 
+DEFAULT_PITCH_TYPE = "Four-Seam Fastball"
+
+
+def filter_pitch_type(df: pd.DataFrame, pitch_type: str) -> pd.DataFrame:
+    """Keep only pitches whose type contains pitch_type (case-insensitive
+    substring), so "fastball", "four-seam", or the full "Four-Seam
+    Fastball" all select the same pitches."""
+    return df[df["pitch_type"].str.contains(pitch_type, case=False, na=False)]
+
+
+def pitch_velocity_by_game(df: pd.DataFrame, pitch_type: str, pitcher_name: str) -> pd.DataFrame:
+    """Collapse a per-pitch DataFrame (from build_pitch_dataframe) to one
+    row per game for a single pitch type: date, opponent, and the game's
+    mean/min/max velocity and pitch count. This is the per-game series
+    behind a velocity-comparison line -- the average is what the line
+    plots, the min/max give the shaded spread band. Raises if the
+    pitcher threw none of that pitch type (a fair comparison needs both
+    sides to have it)."""
+    filtered = filter_pitch_type(df, pitch_type)
+    if filtered.empty:
+        raise ValueError(f"No {pitch_type} pitches found for {pitcher_name}")
+
+    grouped = filtered.groupby("date", sort=True)
+    return pd.DataFrame({
+        "date": grouped["date"].first(),
+        "opponent": grouped["opponent"].first(),
+        "count": grouped["velo"].count(),
+        "mean": grouped["velo"].mean(),
+        "min": grouped["velo"].min(),
+        "max": grouped["velo"].max(),
+    }).reset_index(drop=True)
+
+
+def format_pitch_comparison_table(by_game: pd.DataFrame, pitch_type: str) -> str:
+    """Render a pitcher's per-game velocity for one pitch type: date,
+    opponent, pitch count, and mean/min/max velo (the mean is the line
+    the comparison chart draws)."""
+    table = by_game.rename(columns={
+        "date": "date", "opponent": "opponent", "count": pitch_type.split()[0].lower() + "s",
+        "mean": "avg_velo", "min": "min_velo", "max": "max_velo",
+    }).copy()
+    for column in ("avg_velo", "min_velo", "max_velo"):
+        table[column] = table[column].round(1)
+    return table.to_string(index=False)
+
+
 def format_standings_table(df: pd.DataFrame) -> str:
     """Render a division's standings as a plain aligned text table."""
     table = df.rename(columns={
@@ -495,6 +541,75 @@ def plot_pitch_velocities(
     # Outside the axes: the dot columns fill the plot area edge to edge,
     # so any in-plot legend position would cover data.
     plt.legend(loc="center left", bbox_to_anchor=(1.01, 0.5))
+    plt.tight_layout()
+    _finish_plot(save_path)
+
+
+VELO_COMPARISON_LAYOUTS = ("stacked", "side-by-side", "overlay")
+
+
+def _draw_velo_panel(ax: Axes, by_game: pd.DataFrame, color: str, label: str | None = None) -> None:
+    """One pitcher's per-game velocity: a shaded min-max band with the
+    mean drawn on top as a marked line. Plotted on a real date axis so
+    the trend reads as over-time, not just game-to-game."""
+    dates = pd.to_datetime(by_game["date"])
+    ax.fill_between(dates, by_game["min"], by_game["max"], color=color, alpha=0.15)
+    ax.plot(dates, by_game["mean"], color=color, marker="o", markersize=4, linewidth=2, label=label)
+
+
+def plot_pitch_velocity_comparison(
+    by_game1: pd.DataFrame,
+    name1: str,
+    by_game2: pd.DataFrame,
+    name2: str,
+    season: int,
+    pitch_type: str,
+    layout: str = "stacked",
+    save_path: str | None = None,
+) -> None:
+    """Compare two pitchers' velocity for one pitch type over a season:
+    each pitcher's per-game mean (marked line) over a shaded min-max
+    band. Inputs are per-game frames from pitch_velocity_by_game.
+
+    layout: "stacked" (one panel per pitcher, stacked, sharing the date
+    axis so timelines line up), "side-by-side" (panels side by side
+    sharing the velocity axis for direct scale comparison), or "overlay"
+    (both on one axes)."""
+    if layout not in VELO_COMPARISON_LAYOUTS:
+        raise ValueError(f"Unknown velo layout '{layout}'. Choose from: {', '.join(VELO_COMPARISON_LAYOUTS)}")
+
+    color1, color2 = "crimson", "steelblue"
+    panels = [(by_game1, name1, color1), (by_game2, name2, color2)]
+    suptitle = f"{pitch_type} Velocity by Game ({season} Season)"
+
+    if layout == "overlay":
+        fig, ax = plt.subplots(figsize=(11, 5.5))
+        for by_game, name, color in panels:
+            _draw_velo_panel(ax, by_game, color, label=name)
+        ax.set_ylabel("Velocity (mph)")
+        ax.set_xlabel("Game date")
+        ax.legend()
+        ax.tick_params(axis="x", rotation=45)
+        ax.set_title(f"{name1} vs {name2} — {suptitle}")
+    elif layout == "side-by-side":
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
+        for ax, (by_game, name, color) in zip(axes, panels):
+            _draw_velo_panel(ax, by_game, color)
+            ax.set_title(name)
+            ax.set_xlabel("Game date")
+            ax.tick_params(axis="x", rotation=45)
+        axes[0].set_ylabel("Velocity (mph)")
+        fig.suptitle(suptitle)
+    else:  # stacked
+        fig, axes = plt.subplots(2, 1, figsize=(11, 8), sharex=True, sharey=True)
+        for ax, (by_game, name, color) in zip(axes, panels):
+            _draw_velo_panel(ax, by_game, color)
+            ax.set_title(name)
+            ax.set_ylabel("Velocity (mph)")
+        axes[-1].set_xlabel("Game date")
+        axes[-1].tick_params(axis="x", rotation=45)
+        fig.suptitle(suptitle)
+
     plt.tight_layout()
     _finish_plot(save_path)
 

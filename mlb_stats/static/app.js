@@ -457,6 +457,121 @@ function renderVeloTable(playerName, pitches, dates) {
   tableContainer.innerHTML = html;
 }
 
+// Two pitchers' per-game average velocity for one pitch type, each drawn
+// as a marked mean line over a shaded min-max band (mirrors the CLI's
+// plot_pitch_velocity_comparison). Real date x-axis, arranged stacked /
+// side-by-side / overlay.
+async function plotVeloCompare(player1, player2, season, start, end, pitchType, layoutMode) {
+  let url = `/api/pitch-velocities-compare?player1=${encodeURIComponent(player1)}`
+          + `&player2=${encodeURIComponent(player2)}&season=${season}`
+          + `&pitch_type=${encodeURIComponent(pitchType)}`;
+  if (start) url += `&start=${start}`;
+  if (end) url += `&end=${end}`;
+  const resp = await fetch(url);
+  const payload = await resp.json();
+  if (!resp.ok) throw new Error(payload.detail || "Request failed");
+
+  const p1 = payload.player1;
+  const p2 = payload.player2;
+  const { axes, plotlyLayout } = computeVeloLayout(layoutMode, p1.name, p2.name);
+
+  const traces = [
+    ...buildVeloBandTraces(p1, COLOR1, axes.p1, layoutMode === "overlay"),
+    ...buildVeloBandTraces(p2, COLOR2, axes.p2, layoutMode === "overlay"),
+  ];
+
+  plotlyLayout.title = layoutMode === "overlay"
+    ? `${p1.name} vs ${p2.name} — ${payload.pitch_type} Velocity (${season} Season)`
+    : `${payload.pitch_type} Velocity by Game (${season} Season)`;
+
+  Plotly.newPlot(chartEl, traces, plotlyLayout, { responsive: true });
+  renderVeloComparisonTable([p1, p2], payload.pitch_type);
+}
+
+// min + max as two zero-width lines with the max filling down to the min
+// (the shaded band), then the mean as a marked line on top. `fill:
+// "tonexty"` fills to the immediately preceding trace, so min must sit
+// right before max in the array.
+function buildVeloBandTraces(player, color, axisIds, showLegend) {
+  const g = player.games;
+  const dates = g.map((r) => r.date);
+  const common = { x: dates, xaxis: axisIds.xaxis, yaxis: axisIds.yaxis };
+  return [
+    { ...common, y: g.map((r) => r.min), mode: "lines", line: { width: 0 },
+      hoverinfo: "skip", showlegend: false },
+    { ...common, y: g.map((r) => r.max), mode: "lines", line: { width: 0 },
+      fill: "tonexty", fillcolor: withAlpha(color, 0.15), hoverinfo: "skip", showlegend: false },
+    { ...common, y: g.map((r) => r.mean), mode: "lines+markers",
+      line: { color, width: 2 }, marker: { size: 5, color },
+      name: player.name, showlegend: showLegend,
+      text: g.map((r) => r.opponent),
+      hovertemplate: "%{x}<br>%{text}<br>avg %{y:.1f} mph<extra>" + player.name + "</extra>" },
+  ];
+}
+
+// Axis ids + domains for the three velo-comparison arrangements. Stacked
+// shares the date axis (top labels hidden) and side-by-side shares the
+// velocity axis, so each layout makes its intended comparison direct.
+function computeVeloLayout(layoutMode, name1, name2) {
+  const plotlyLayout = { margin: { b: 80 }, height: layoutMode === "stacked" ? 660 : 520 };
+  const annotations = [];
+  const annotate = (text, x, y) => annotations.push({
+    text, x, y, xref: "paper", yref: "paper", showarrow: false,
+    xanchor: "center", yanchor: "bottom", font: { size: 13 },
+  });
+  let axes;
+
+  if (layoutMode === "overlay") {
+    axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x", yaxis: "y" } };
+    plotlyLayout.xaxis = { title: "Game date" };
+    plotlyLayout.yaxis = { title: "Velocity (mph)" };
+    plotlyLayout.legend = { ...HORIZONTAL_LEGEND };
+  } else if (layoutMode === "side-by-side") {
+    axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x2", yaxis: "y2" } };
+    const gap = 0.08;
+    const half = (1 - gap) / 2;
+    plotlyLayout.xaxis = { domain: [0, half], anchor: "y", title: "Game date" };
+    plotlyLayout.yaxis = { title: "Velocity (mph)" };
+    plotlyLayout.xaxis2 = { domain: [half + gap, 1], anchor: "y2", title: "Game date" };
+    plotlyLayout.yaxis2 = { matches: "y" };
+    annotate(name1, half / 2, 1.02);
+    annotate(name2, half + gap + half / 2, 1.02);
+    plotlyLayout.showlegend = false;
+  } else {  // stacked
+    axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x2", yaxis: "y2" } };
+    plotlyLayout.yaxis = { domain: [0.56, 1], title: "Velocity (mph)" };
+    plotlyLayout.yaxis2 = { domain: [0, 0.44], title: "Velocity (mph)", matches: "y" };
+    plotlyLayout.xaxis = { anchor: "y", matches: "x2", showticklabels: false };
+    plotlyLayout.xaxis2 = { anchor: "y2", title: "Game date" };
+    annotate(name1, 0.5, 1.0);
+    annotate(name2, 0.5, 0.46);
+    plotlyLayout.showlegend = false;
+  }
+
+  plotlyLayout.annotations = annotations;
+  return { axes, plotlyLayout };
+}
+
+function renderVeloComparisonTable(players, pitchType) {
+  if (!document.getElementById("showVeloTable").checked) {
+    tableContainer.innerHTML = "";
+    return;
+  }
+
+  let html = "";
+  for (const { name, games } of players) {
+    html += `<h2>${name} — ${pitchType}</h2><table><thead><tr>
+      <th>Date</th><th>Opponent</th><th>Pitches</th><th>Avg</th><th>Min</th><th>Max</th>
+    </tr></thead><tbody>`;
+    for (const g of games) {
+      html += `<tr><td>${g.date}</td><td>${g.opponent}</td><td>${g.count}</td>`
+            + `<td>${g.mean.toFixed(1)}</td><td>${g.min.toFixed(1)}</td><td>${g.max.toFixed(1)}</td></tr>`;
+    }
+    html += "</tbody></table>";
+  }
+  tableContainer.innerHTML = html;
+}
+
 // Mode toggle: swaps which field group is visible and which plotting
 // path the submit handler takes.
 const modeButtons = document.querySelectorAll(".mode-btn");
@@ -493,10 +608,17 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
       await plotStandings(division, season);
     } else if (mode === "velo") {
       const player = document.getElementById("veloPlayer").value.trim();
+      const player2 = document.getElementById("veloPlayer2").value.trim();
       const season = document.getElementById("veloSeason").value;
       const start = document.getElementById("veloStart").value;
       const end = document.getElementById("veloEnd").value;
-      await plotVelo(player, season, start, end);
+      if (player2) {
+        const pitchType = document.getElementById("veloPitchType").value.trim() || "Four-Seam Fastball";
+        const layoutMode = document.getElementById("veloLayout").value;
+        await plotVeloCompare(player, player2, season, start, end, pitchType, layoutMode);
+      } else {
+        await plotVelo(player, season, start, end);
+      }
     } else {
       const player1 = document.getElementById("player1").value.trim();
       const player2 = document.getElementById("player2").value.trim();
@@ -565,6 +687,7 @@ function wireAutocomplete(inputId, datalistId) {
 wireAutocomplete("player1", "player1-suggestions");
 wireAutocomplete("player2", "player2-suggestions");
 wireAutocomplete("veloPlayer", "veloPlayer-suggestions");
+wireAutocomplete("veloPlayer2", "veloPlayer2-suggestions");
 
 // Default the season inputs to the current year (the backend also falls
 // back to the current season server-side when the param is omitted).
