@@ -77,6 +77,12 @@
             <datalist id="veloPlayer-suggestions"></datalist>
           </div>
           <div class="field">
+            <label for="veloPlayer2">Compare against <span class="hint">(optional)</span></label>
+            <input id="veloPlayer2" type="text" placeholder="Tarik Skubal"
+                   list="veloPlayer2-suggestions" autocomplete="off">
+            <datalist id="veloPlayer2-suggestions"></datalist>
+          </div>
+          <div class="field">
             <label for="veloSeason">Season</label>
             <input id="veloSeason" type="number">
           </div>
@@ -89,6 +95,20 @@
               <label for="veloEnd">To <span class="hint">(optional)</span></label>
               <input id="veloEnd" type="date">
             </div>
+          </div>
+
+          <div class="section-label">Comparison options</div>
+          <div class="field">
+            <label for="veloPitchType">Pitch type <span class="hint">(comparison line)</span></label>
+            <input id="veloPitchType" type="text" placeholder="Four-Seam Fastball" value="Four-Seam Fastball">
+          </div>
+          <div class="field">
+            <label for="veloLayout">Layout</label>
+            <select id="veloLayout">
+              <option value="stacked" selected>Stacked</option>
+              <option value="side-by-side">Side by side</option>
+              <option value="overlay">Overlay</option>
+            </select>
           </div>
           <div class="field checkbox">
             <label><input id="showVeloTable" type="checkbox"> Show per-game summary table</label>

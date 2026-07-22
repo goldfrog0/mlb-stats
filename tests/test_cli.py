@@ -202,8 +202,32 @@ class TestMain:
             cli.main()
         assert excinfo.value.code == 2
 
-    def test_velo_with_second_player_is_a_usage_error(self, monkeypatch) -> None:
-        monkeypatch.setattr("sys.argv", ["mlb-stats", "Someone", "Someone Else", "--velo"])
+    def test_velo_comparison_saves_chart_and_prints_both_tables(
+        self, monkeypatch, tmp_path, velo_game_splits, game_pitches_by_pk, capsys,
+    ) -> None:
+        names = iter(["Pitcher One", "Pitcher Two"])
+        monkeypatch.setattr(cli, "find_player", lambda name: (694973, next(names)))
+        monkeypatch.setattr(cli, "get_game_log", lambda pid, season, group: velo_game_splits)
+        monkeypatch.setattr(cli, "get_game_pitches", lambda pk: game_pitches_by_pk[pk])
+        out = tmp_path / "cmp.png"
+        monkeypatch.setattr("sys.argv", [
+            "mlb-stats", "One", "Two", "--velo", "--pitch-type", "fastball", "--table", "--save", str(out),
+        ])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+        printed = capsys.readouterr().out
+        assert "Pitcher One" in printed and "Pitcher Two" in printed
+        assert "avg_velo" in printed
+
+    def test_velo_comparison_bad_layout_is_a_usage_error(self, monkeypatch) -> None:
+        # chefs-special is a stat-comparison layout; velo doesn't allow it.
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "One", "Two", "--velo", "--layout", "chefs-special"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 2
+
+    def test_pitch_type_without_velo_is_a_usage_error(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Someone", "--pitch-type", "fastball"])
         with pytest.raises(SystemExit) as excinfo:
             cli.main()
         assert excinfo.value.code == 2

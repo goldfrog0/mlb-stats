@@ -168,6 +168,41 @@ class TestPitchVelocitiesEndpoint:
         assert resp.status_code == 422
 
 
+class TestPitchVelocitiesCompareEndpoint:
+    @pytest.fixture
+    def fake_velo_api(self, monkeypatch, velo_game_splits, game_pitches_by_pk):
+        monkeypatch.setattr(web, "find_player", lambda name: (694973, f"Resolved {name}"))
+        monkeypatch.setattr(web, "get_game_log", lambda pid, season, group: velo_game_splits)
+        monkeypatch.setattr(web, "get_game_pitches", lambda pk: game_pitches_by_pk[pk])
+
+    def test_response_shape(self, fake_velo_api) -> None:
+        resp = client.get("/api/pitch-velocities-compare",
+                          params={"player1": "A", "player2": "B", "pitch_type": "fastball"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["pitch_type"] == "fastball"
+        assert payload["player1"]["name"] == "Resolved A"
+        # Per-game fastball aggregates: game 1 = mean of 97/95 = 96.0.
+        game1 = payload["player1"]["games"][0]
+        assert game1["mean"] == pytest.approx(96.0)
+        assert set(game1) == {"date", "opponent", "count", "mean", "min", "max"}
+
+    def test_pitch_type_defaults_to_four_seam(self, fake_velo_api) -> None:
+        resp = client.get("/api/pitch-velocities-compare", params={"player1": "A", "player2": "B"})
+        assert resp.status_code == 200
+        assert resp.json()["pitch_type"] == "Four-Seam Fastball"
+
+    def test_pitcher_without_that_type_is_404(self, fake_velo_api) -> None:
+        resp = client.get("/api/pitch-velocities-compare",
+                          params={"player1": "A", "player2": "B", "pitch_type": "Splitter"})
+        assert resp.status_code == 404
+        assert "No Splitter pitches found" in resp.json()["detail"]
+
+    def test_missing_player2_is_a_validation_error(self, fake_velo_api) -> None:
+        resp = client.get("/api/pitch-velocities-compare", params={"player1": "A"})
+        assert resp.status_code == 422
+
+
 class TestStandingsEndpoint:
     @pytest.fixture
     def fake_standings_api(self, monkeypatch, division_team_records):

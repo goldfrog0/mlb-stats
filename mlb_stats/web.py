@@ -26,6 +26,7 @@ from mlb_stats.api import (
     search_players,
 )
 from mlb_stats.plots import (
+    DEFAULT_PITCH_TYPE,
     build_pitch_dataframe,
     build_standings_dataframe,
     build_stat_dataframe,
@@ -33,6 +34,7 @@ from mlb_stats.plots import (
     add_rolling_stat,
     compute_game_value,
     filter_splits_by_date,
+    pitch_velocity_by_game,
 )
 from mlb_stats.stats import STAT_CONFIGS, get_stat_config
 from mlb_stats.war import build_war_approx_dataframe, league_fip, league_woba, position_adjustment
@@ -55,6 +57,18 @@ def _serialize(df: pd.DataFrame) -> list[dict[str, Any]]:
     out = df[["date", "opponent", "game", "cumulative", "rolling"]].copy()
     out["date"] = out["date"].dt.strftime("%Y-%m-%d")
     return out.where(pd.notna(out), None).to_dict(orient="records")
+
+
+def _load_pitch_df(
+    name: str, season: int | None, start: str | None, end: str | None,
+) -> tuple[str, pd.DataFrame]:
+    """Resolve a pitcher and build their per-pitch DataFrame for the date
+    range (shared by the single and comparison velocity endpoints)."""
+    player_id, full_name = find_player(name)
+    splits = get_game_log(player_id, season or _current_season(), "pitching")
+    splits = filter_splits_by_date(splits, start, end)
+    games = [(s, get_game_pitches(s["game"]["gamePk"])) for s in splits]
+    return full_name, build_pitch_dataframe(games, player_id)
 
 
 def _load_stat_dataframe(name: str, season: int, stat_key: str, window: int) -> tuple[pd.DataFrame, str]:
@@ -143,15 +157,36 @@ def pitch_velocities(
     per-game grouping, so no rolling/serialization machinery applies --
     dates are already plain ISO strings in the pitch DataFrame."""
     try:
-        player_id, full_name = find_player(name)
-        splits = get_game_log(player_id, season or _current_season(), "pitching")
-        splits = filter_splits_by_date(splits, start, end)
-        games = [(s, get_game_pitches(s["game"]["gamePk"])) for s in splits]
-        df = build_pitch_dataframe(games, player_id)
+        full_name, df = _load_pitch_df(name, season, start, end)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
     return {"name": full_name, "pitches": df.to_dict(orient="records")}
+
+
+@app.get("/api/pitch-velocities-compare")
+def pitch_velocities_compare(
+    player1: str, player2: str, season: int | None = None,
+    start: str | None = None, end: str | None = None, pitch_type: str | None = None,
+) -> dict[str, Any]:
+    """Two pitchers' per-game velocity for one pitch type, each as a list
+    of {date, opponent, count, mean, min, max} records -- the same
+    per-game aggregation the CLI comparison plots, so the frontend just
+    draws the mean line over the min/max band."""
+    resolved_type = pitch_type or DEFAULT_PITCH_TYPE
+    try:
+        name1, df1 = _load_pitch_df(player1, season, start, end)
+        name2, df2 = _load_pitch_df(player2, season, start, end)
+        by_game1 = pitch_velocity_by_game(df1, resolved_type, name1)
+        by_game2 = pitch_velocity_by_game(df2, resolved_type, name2)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {
+        "pitch_type": resolved_type,
+        "player1": {"name": name1, "games": by_game1.to_dict(orient="records")},
+        "player2": {"name": name2, "games": by_game2.to_dict(orient="records")},
+    }
 
 
 @app.get("/api/standings")

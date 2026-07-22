@@ -6,7 +6,15 @@ Uses velo_game_splits/game_pitches_by_pk from conftest.py."""
 import pytest
 
 import mlb_stats.api as api
-from mlb_stats.plots import build_pitch_dataframe, filter_splits_by_date, format_pitch_table
+from mlb_stats.plots import (
+    build_pitch_dataframe,
+    filter_pitch_type,
+    filter_splits_by_date,
+    format_pitch_comparison_table,
+    format_pitch_table,
+    pitch_velocity_by_game,
+    plot_pitch_velocity_comparison,
+)
 
 # Must match conftest.py's PITCHER_ID (the game_pitches_by_pk fixture
 # attributes its pitches to this id). Duplicated rather than imported:
@@ -140,3 +148,77 @@ class TestFormatPitchTable:
         assert "Opponent B" in lines[2]
         for value in ("2", "98.5", "84.0"):
             assert value in lines[2]
+
+
+class TestFilterPitchType:
+    @pytest.fixture
+    def df(self, velo_game_splits, game_pitches_by_pk):
+        games = [(s, game_pitches_by_pk[s["game"]["gamePk"]]) for s in velo_game_splits]
+        return build_pitch_dataframe(games, PITCHER_ID)
+
+    def test_case_insensitive_substring_match(self, df) -> None:
+        # Fixture fastballs are "Four-Seam Fastball"; each of these substrings selects them.
+        for query in ("Four-Seam Fastball", "four-seam", "fastball", "SEAM"):
+            assert list(filter_pitch_type(df, query)["velo"]) == [97.0, 95.0, 98.5]
+
+    def test_non_matching_type_is_empty(self, df) -> None:
+        assert filter_pitch_type(df, "knuckleball").empty
+
+
+class TestPitchVelocityByGame:
+    @pytest.fixture
+    def df(self, velo_game_splits, game_pitches_by_pk):
+        games = [(s, game_pitches_by_pk[s["game"]["gamePk"]]) for s in velo_game_splits]
+        return build_pitch_dataframe(games, PITCHER_ID)
+
+    def test_per_game_aggregates_for_one_type(self, df) -> None:
+        by_game = pitch_velocity_by_game(df, "Four-Seam Fastball", "Test Pitcher")
+        assert list(by_game["date"]) == ["2026-06-01", "2026-06-06"]
+        # Game 1: two fastballs 97/95 -> count 2, mean 96, min 95, max 97.
+        first = by_game.iloc[0]
+        assert (first["count"], first["mean"], first["min"], first["max"]) == (2, 96.0, 95.0, 97.0)
+        # Game 2: one fastball 98.5.
+        second = by_game.iloc[1]
+        assert (second["count"], second["mean"], second["min"], second["max"]) == (1, 98.5, 98.5, 98.5)
+
+    def test_excludes_other_pitch_types(self, df) -> None:
+        # The slider (85) and curveball (84) must not pull the fastball mean down.
+        by_game = pitch_velocity_by_game(df, "fastball", "Test Pitcher")
+        assert by_game["mean"].min() >= 96.0
+
+    def test_no_pitches_of_type_raises(self, df) -> None:
+        with pytest.raises(ValueError, match="No Splitter pitches found for Test Pitcher"):
+            pitch_velocity_by_game(df, "Splitter", "Test Pitcher")
+
+
+class TestFormatPitchComparisonTable:
+    def test_per_game_rows_with_avg(self, velo_game_splits, game_pitches_by_pk) -> None:
+        games = [(s, game_pitches_by_pk[s["game"]["gamePk"]]) for s in velo_game_splits]
+        by_game = pitch_velocity_by_game(build_pitch_dataframe(games, PITCHER_ID),
+                                         "Four-Seam Fastball", "Test Pitcher")
+        table = format_pitch_comparison_table(by_game, "Four-Seam Fastball")
+        lines = table.splitlines()
+        assert len(lines) == 3  # header + two games
+        assert "avg_velo" in lines[0]
+        assert "96.0" in lines[1]  # game 1 fastball average
+
+
+class TestPlotPitchVelocityComparison:
+    @pytest.fixture
+    def two_pitchers(self, velo_game_splits, game_pitches_by_pk):
+        games = [(s, game_pitches_by_pk[s["game"]["gamePk"]]) for s in velo_game_splits]
+        df = build_pitch_dataframe(games, PITCHER_ID)
+        by_game = pitch_velocity_by_game(df, "Four-Seam Fastball", "A")
+        return by_game
+
+    @pytest.mark.parametrize("layout", ["stacked", "side-by-side", "overlay"])
+    def test_renders_each_layout(self, two_pitchers, tmp_path, layout) -> None:
+        out = tmp_path / f"{layout}.png"
+        plot_pitch_velocity_comparison(two_pitchers, "A", two_pitchers, "B", 2026,
+                                       "Four-Seam Fastball", layout=layout, save_path=str(out))
+        assert out.exists() and out.stat().st_size > 0
+
+    def test_unknown_layout_raises(self, two_pitchers) -> None:
+        with pytest.raises(ValueError, match="Unknown velo layout 'chefs-special'"):
+            plot_pitch_velocity_comparison(two_pitchers, "A", two_pitchers, "B", 2026,
+                                           "Four-Seam Fastball", layout="chefs-special")

@@ -236,8 +236,32 @@ The player must be a pitcher. --start-date/--end-date (inclusive,
 YYYY-MM-DD, either side optional) narrow the plot to a stretch of the
 season -- e.g. one month, as above. --season and --save work as usual;
 --table prints a per-game summary (pitch count, max/median/min velo)
-rather than one row per pitch. --stat, --window, and the comparison
-options don't apply, and a second player isn't supported.
+rather than one row per pitch. --stat and --window don't apply.
+
+--pitch-type restricts the single-pitcher view to one pitch type,
+matched case-insensitively as a substring, so "fastball", "four-seam",
+or the full "Four-Seam Fastball" all select the same pitches:
+
+     mlb-stats "Paul Skenes" --velo --pitch-type slider
+
+Comparing two pitchers: give a second pitcher and the chart switches to
+a velocity-over-time comparison -- each pitcher's per-game AVERAGE
+velocity for one pitch type (default "Four-Seam Fastball"; change it
+with --pitch-type) drawn as a line over a shaded min-max band, on a
+real date axis so the season trend reads clearly:
+
+     mlb-stats "Paul Skenes" "Tarik Skubal" --velo
+     mlb-stats "Paul Skenes" "Tarik Skubal" --velo --pitch-type sinker
+     mlb-stats "Paul Skenes" "Tarik Skubal" --velo --layout side-by-side --table
+
+--layout arranges the two pitchers: "stacked" (default -- one panel
+each, stacked, sharing the date axis so timelines line up), "side-by-
+side" (sharing the velocity axis for direct scale comparison), or
+"overlay" (both on one axes). (The stat-comparison layout "chefs-
+special" doesn't apply to velo.) Both pitchers must have thrown the
+chosen pitch type, or you'll get a "No ... pitches found" error for
+whichever one didn't. --table prints each pitcher's per-game count and
+avg/min/max for that pitch type.
 
 Unlike the game-log stats, this pulls each game's full play-by-play
 feed (one extra API call per game, cached for 24 hours -- a completed
@@ -307,6 +331,11 @@ TROUBLESHOOTING
      --velo: the player has games in the range but no tracked pitches
      -- most likely they're a position player, not a pitcher.
 
+"No ... pitches found for ..."
+     --velo with --pitch-type (or a two-pitcher comparison): that
+     pitcher never threw the requested pitch type. Check the spelling,
+     or pick a type both pitchers throw (e.g. "Four-Seam Fastball").
+
 "No games found between ... and ..."
      --velo: no games in the --start-date/--end-date range. Check the
      dates are YYYY-MM-DD and fall within the season.
@@ -353,7 +382,11 @@ mlb_stats/plots.py    Data shaping + charting: build_stat_dataframe(),
                       format_standings_table(), plot_standings(),
                       and the pitch-velocity set:
                       filter_splits_by_date(), build_pitch_dataframe(),
-                      format_pitch_table(), plot_pitch_velocities()
+                      format_pitch_table(), plot_pitch_velocities(),
+                      and for two-pitcher velo comparison
+                      filter_pitch_type(), pitch_velocity_by_game(),
+                      format_pitch_comparison_table(),
+                      plot_pitch_velocity_comparison()
 mlb_stats/cli.py      Argument parsing / entry point (main())
 
 Data source: MLB Stats API (https://statsapi.mlb.com) — public,

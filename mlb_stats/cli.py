@@ -17,16 +17,22 @@ from mlb_stats.api import (
 )
 from mlb_stats.plots import (
     COMPARISON_LAYOUTS,
+    DEFAULT_PITCH_TYPE,
+    VELO_COMPARISON_LAYOUTS,
     build_pitch_dataframe,
     build_stat_dataframe,
     build_standings_dataframe,
     build_team_win_dataframe,
     add_rolling_stat,
+    filter_pitch_type,
     filter_splits_by_date,
+    format_pitch_comparison_table,
     format_pitch_table,
     format_standings_table,
     format_stat_table,
+    pitch_velocity_by_game,
     plot_pitch_velocities,
+    plot_pitch_velocity_comparison,
     plot_standings,
     plot_stat,
     plot_stat_comparison,
@@ -80,6 +86,15 @@ def _load_pitch_dataframe(
     return df, full_name
 
 
+def _filter_single_velo(df: pd.DataFrame, pitch_type: str, pitcher_name: str) -> pd.DataFrame:
+    """Restrict a single pitcher's per-pitch DataFrame to one pitch type,
+    raising with a clear message rather than plotting an empty chart."""
+    filtered = filter_pitch_type(df, pitch_type)
+    if filtered.empty:
+        raise ValueError(f"No {pitch_type} pitches found for {pitcher_name}")
+    return filtered
+
+
 def _load_standings_dataframe(division_name: str, season: int) -> tuple[pd.DataFrame, str]:
     division_id, full_name = find_division(division_name)
     team_records = get_division_standings(division_id, season)
@@ -113,6 +128,15 @@ def _auto_filename_velo(player: str, season: int, start_date: str | None, end_da
         name += f"_from{start_date}"
     if end_date:
         name += f"_to{end_date}"
+    return f"{name}_{_today_str()}.png"
+
+
+def _auto_filename_velo_compare(
+    player1: str, player2: str, pitch_type: str, season: int, layout: str,
+) -> str:
+    name = f"{_slugify(player1)}_vs_{_slugify(player2)}_velo_{_slugify(pitch_type)}_{season}"
+    if layout != "stacked":
+        name += f"_{layout}"
     return f"{name}_{_today_str()}.png"
 
 
@@ -153,8 +177,15 @@ def main() -> None:
     parser.add_argument("--velo", action="store_true",
                         help="Plot every pitch's release velocity as a dot column per game, "
                              "colored by pitch type, with a line tracing each game's max velo. "
-                             "The player must be a pitcher; player2/--stat/--window don't apply. "
+                             "The player must be a pitcher; --stat/--window don't apply. Give a "
+                             "second pitcher to compare their per-game average velocity for one "
+                             "pitch type (see --pitch-type) over the season, arranged by --layout. "
                              "--season, --save, --table, and --start-date/--end-date all work")
+    parser.add_argument("--pitch-type", type=str, default=None, metavar="TYPE",
+                        help='--velo only: restrict to one pitch type, matched case-insensitively '
+                             'as a substring ("fastball", "four-seam", "slider", ...). In velo '
+                             f'comparison mode the average line is for this type (default: '
+                             f'"{DEFAULT_PITCH_TYPE}")')
     parser.add_argument("--start-date", type=str, default=None, metavar="YYYY-MM-DD",
                         help="--velo only: skip games before this date (inclusive)")
     parser.add_argument("--end-date", type=str, default=None, metavar="YYYY-MM-DD",
@@ -169,9 +200,10 @@ def main() -> None:
                              "non-default), e.g. shohei-ohtani_era_2026.png")
     parser.add_argument("--table", action="store_true",
                         help="Also print the plotted data as a text table")
-    parser.add_argument("--layout", type=str, default="overlay", choices=COMPARISON_LAYOUTS,
-                        help="Comparison mode only: how to arrange the two players' charts "
-                             "(default: overlay)")
+    parser.add_argument("--layout", type=str, default=None, choices=COMPARISON_LAYOUTS,
+                        help="Comparison mode only: how to arrange the two players' charts. "
+                             "Default: overlay for stat comparison, stacked for --velo "
+                             "comparison (which has no overlay/chefs-special)")
     parser.add_argument("--show-cumulative", action="store_true",
                         help="Comparison mode only: also draw each player's season-cumulative "
                              "line (dashed)")
@@ -183,10 +215,18 @@ def main() -> None:
 
     if not args.standings and not args.player:
         parser.error("player is required unless --standings is given")
-    if args.velo and args.player2:
-        parser.error("--velo plots a single pitcher; a second player is not supported")
     if (args.start_date or args.end_date) and not args.velo:
         parser.error("--start-date/--end-date only apply to --velo")
+    if args.pitch_type and not args.velo:
+        parser.error("--pitch-type only applies to --velo")
+
+    # Layout defaults differ by mode; a velo comparison has no overlay-vs-
+    # rolling-lines concept, so its default is stacked and chefs-special
+    # (a stat-only layout) isn't valid.
+    if args.layout is None:
+        args.layout = "stacked" if (args.velo and args.player2) else "overlay"
+    if args.velo and args.player2 and args.layout not in VELO_COMPARISON_LAYOUTS:
+        parser.error(f"--velo comparison layout must be one of: {', '.join(VELO_COMPARISON_LAYOUTS)}")
 
     try:
         if args.standings:
@@ -202,8 +242,29 @@ def main() -> None:
                 save_path = _auto_filename_standings(division_name, args.season)
 
             plot_standings(df, division_name, args.season, save_path=save_path)
+        elif args.velo and args.player2:
+            pitch_type = args.pitch_type or DEFAULT_PITCH_TYPE
+            df1, name1 = _load_pitch_dataframe(args.player, args.season, args.start_date, args.end_date)
+            df2, name2 = _load_pitch_dataframe(args.player2, args.season, args.start_date, args.end_date)
+            by_game1 = pitch_velocity_by_game(df1, pitch_type, name1)
+            by_game2 = pitch_velocity_by_game(df2, pitch_type, name2)
+
+            if args.table:
+                for name, by_game in [(name1, by_game1), (name2, by_game2)]:
+                    print(f"\n{name}")
+                    print("-" * len(name))
+                    print(format_pitch_comparison_table(by_game, pitch_type))
+
+            save_path = args.save
+            if save_path == AUTO_SAVE:
+                save_path = _auto_filename_velo_compare(name1, name2, pitch_type, args.season, args.layout)
+
+            plot_pitch_velocity_comparison(by_game1, name1, by_game2, name2, args.season,
+                                            pitch_type, layout=args.layout, save_path=save_path)
         elif args.velo:
             df, full_name = _load_pitch_dataframe(args.player, args.season, args.start_date, args.end_date)
+            if args.pitch_type:
+                df = _filter_single_velo(df, args.pitch_type, full_name)
 
             if args.table:
                 print(f"\n{full_name}")
