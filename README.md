@@ -165,6 +165,15 @@ mypy mlb_stats --ignore-missing-imports
 ruff check mlb_stats tests
 ```
 
+## License
+
+Copyright (C) 2026 Xavier Garrido
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of version 3 of the GNU General Public License as
+published by the Free Software Foundation. See [LICENSE](LICENSE) for
+the full text.
+
 ## Disclaimer
 
 Not affiliated with, endorsed by, or sponsored by MLB or MLB Advanced
