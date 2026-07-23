@@ -496,7 +496,7 @@ function renderVeloTable(playerName, pitches, dates) {
 // as a marked mean line over a shaded min-max band (mirrors the CLI's
 // plot_pitch_velocity_comparison). Real date x-axis, arranged stacked /
 // side-by-side / overlay.
-async function plotVeloCompare(player1, player2, season, start, end, pitchType, layoutMode) {
+async function plotVeloCompare(player1, player2, season, start, end, pitchType, layoutMode, box) {
   let url = `/api/pitch-velocities-compare?player1=${encodeURIComponent(player1)}`
           + `&player2=${encodeURIComponent(player2)}&season=${season}`
           + `&pitch_type=${encodeURIComponent(pitchType)}`;
@@ -509,10 +509,11 @@ async function plotVeloCompare(player1, player2, season, start, end, pitchType, 
   const p1 = payload.player1;
   const p2 = payload.player2;
   const { axes, plotlyLayout } = computeVeloLayout(layoutMode, p1.name, p2.name);
+  if (box) plotlyLayout.boxmode = "overlay";
 
   const traces = [
-    ...buildVeloBandTraces(p1, COLOR1, axes.p1, layoutMode === "overlay"),
-    ...buildVeloBandTraces(p2, COLOR2, axes.p2, layoutMode === "overlay"),
+    ...buildVeloBandTraces(p1, COLOR1, axes.p1, layoutMode === "overlay", box),
+    ...buildVeloBandTraces(p2, COLOR2, axes.p2, layoutMode === "overlay", box),
   ];
 
   plotlyLayout.title = layoutMode === "overlay"
@@ -527,20 +528,38 @@ async function plotVeloCompare(player1, player2, season, start, end, pitchType, 
 // (the shaded band), then the mean as a marked line on top. `fill:
 // "tonexty"` fills to the immediately preceding trace, so min must sit
 // right before max in the array.
-function buildVeloBandTraces(player, color, axisIds, showLegend) {
+function buildVeloBandTraces(player, color, axisIds, showLegend, box) {
   const g = player.games;
   const dates = g.map((r) => r.date);
   const common = { x: dates, xaxis: axisIds.xaxis, yaxis: axisIds.yaxis };
+  // Track the median with boxes (the box's own centre line) and the mean
+  // with the band.
+  const centerLabel = box ? "median" : "avg";
+  const centerLine = {
+    ...common, y: g.map((r) => (box ? r.median : r.mean)), mode: "lines+markers", type: "scatter",
+    line: { color, width: 2 }, marker: { size: 5, color },
+    name: player.name, showlegend: showLegend,
+    text: g.map((r) => r.opponent),
+    hovertemplate: "%{x}<br>%{text}<br>" + centerLabel + " %{y:.1f} mph<extra>" + player.name + "</extra>",
+  };
+  // box: a box-and-whisker per game from precomputed stats (quartiles +
+  // full min/max whiskers) in place of the min-max band.
+  if (box) {
+    return [
+      { ...common, type: "box",
+        q1: g.map((r) => r.q1), median: g.map((r) => r.median), q3: g.map((r) => r.q3),
+        lowerfence: g.map((r) => r.min), upperfence: g.map((r) => r.max),
+        line: { color }, fillcolor: withAlpha(color, 0.25),
+        showlegend: false, hoverinfo: "skip" },
+      centerLine,
+    ];
+  }
   return [
-    { ...common, y: g.map((r) => r.min), mode: "lines", line: { width: 0 },
+    { ...common, y: g.map((r) => r.min), mode: "lines", type: "scatter", line: { width: 0 },
       hoverinfo: "skip", showlegend: false },
-    { ...common, y: g.map((r) => r.max), mode: "lines", line: { width: 0 },
+    { ...common, y: g.map((r) => r.max), mode: "lines", type: "scatter", line: { width: 0 },
       fill: "tonexty", fillcolor: withAlpha(color, 0.15), hoverinfo: "skip", showlegend: false },
-    { ...common, y: g.map((r) => r.mean), mode: "lines+markers",
-      line: { color, width: 2 }, marker: { size: 5, color },
-      name: player.name, showlegend: showLegend,
-      text: g.map((r) => r.opponent),
-      hovertemplate: "%{x}<br>%{text}<br>avg %{y:.1f} mph<extra>" + player.name + "</extra>" },
+    centerLine,
   ];
 }
 
@@ -556,18 +575,21 @@ function computeVeloLayout(layoutMode, name1, name2) {
   });
   let axes;
 
+  // type "date" is set explicitly (not left to inference): box traces
+  // would otherwise flip the axis to categorical and break alignment
+  // with the scatter mean line.
   if (layoutMode === "overlay") {
     axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x", yaxis: "y" } };
-    plotlyLayout.xaxis = { title: "Game date" };
+    plotlyLayout.xaxis = { type: "date", title: "Game date" };
     plotlyLayout.yaxis = { title: "Velocity (mph)" };
     plotlyLayout.legend = { ...HORIZONTAL_LEGEND };
   } else if (layoutMode === "side-by-side") {
     axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x2", yaxis: "y2" } };
     const gap = 0.08;
     const half = (1 - gap) / 2;
-    plotlyLayout.xaxis = { domain: [0, half], anchor: "y", title: "Game date" };
+    plotlyLayout.xaxis = { type: "date", domain: [0, half], anchor: "y", title: "Game date" };
     plotlyLayout.yaxis = { title: "Velocity (mph)" };
-    plotlyLayout.xaxis2 = { domain: [half + gap, 1], anchor: "y2", title: "Game date" };
+    plotlyLayout.xaxis2 = { type: "date", domain: [half + gap, 1], anchor: "y2", title: "Game date" };
     plotlyLayout.yaxis2 = { matches: "y" };
     annotate(name1, half / 2, 1.02);
     annotate(name2, half + gap + half / 2, 1.02);
@@ -576,8 +598,8 @@ function computeVeloLayout(layoutMode, name1, name2) {
     axes = { p1: { xaxis: "x", yaxis: "y" }, p2: { xaxis: "x2", yaxis: "y2" } };
     plotlyLayout.yaxis = { domain: [0.56, 1], title: "Velocity (mph)" };
     plotlyLayout.yaxis2 = { domain: [0, 0.44], title: "Velocity (mph)", matches: "y" };
-    plotlyLayout.xaxis = { anchor: "y", matches: "x2", showticklabels: false };
-    plotlyLayout.xaxis2 = { anchor: "y2", title: "Game date" };
+    plotlyLayout.xaxis = { type: "date", anchor: "y", matches: "x2", showticklabels: false };
+    plotlyLayout.xaxis2 = { type: "date", anchor: "y2", title: "Game date" };
     annotate(name1, 0.5, 1.0);
     annotate(name2, 0.5, 0.46);
     plotlyLayout.showlegend = false;
@@ -647,12 +669,14 @@ document.getElementById("controls").addEventListener("submit", async (event) => 
       const season = document.getElementById("veloSeason").value;
       const start = document.getElementById("veloStart").value;
       const end = document.getElementById("veloEnd").value;
+      const box = document.getElementById("veloBox").value;
       if (player2) {
         const pitchType = document.getElementById("veloPitchType").value.trim() || "Four-Seam Fastball";
         const layoutMode = document.getElementById("veloLayout").value;
-        await plotVeloCompare(player, player2, season, start, end, pitchType, layoutMode);
+        // In comparison any box selection means per-game boxes (one pitch
+        // type already), so "type" and "game" both just turn boxes on.
+        await plotVeloCompare(player, player2, season, start, end, pitchType, layoutMode, Boolean(box));
       } else {
-        const box = document.getElementById("veloBox").value;
         await plotVelo(player, season, start, end, box);
       }
     } else {

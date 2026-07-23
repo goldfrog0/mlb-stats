@@ -250,11 +250,26 @@ class TestMain:
             cli.main()
         assert excinfo.value.code == 2
 
-    def test_box_with_comparison_is_a_usage_error(self, monkeypatch) -> None:
-        monkeypatch.setattr("sys.argv", ["mlb-stats", "One", "Two", "--velo", "--box", "game"])
+    def test_box_type_with_comparison_is_a_usage_error(self, monkeypatch) -> None:
+        # "type" grouping is single-pitcher only; a comparison is one pitch type.
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "One", "Two", "--velo", "--box", "type"])
         with pytest.raises(SystemExit) as excinfo:
             cli.main()
         assert excinfo.value.code == 2
+
+    def test_velo_comparison_box_saves_chart(
+        self, monkeypatch, tmp_path, velo_game_splits, game_pitches_by_pk,
+    ) -> None:
+        names = iter(["Pitcher One", "Pitcher Two"])
+        monkeypatch.setattr(cli, "find_player", lambda name: (694973, next(names)))
+        monkeypatch.setattr(cli, "get_game_log", lambda pid, season, group: velo_game_splits)
+        monkeypatch.setattr(cli, "get_game_pitches", lambda pk: game_pitches_by_pk[pk])
+        out = tmp_path / "cmp_box.png"
+        monkeypatch.setattr("sys.argv", [
+            "mlb-stats", "One", "Two", "--velo", "--pitch-type", "fastball", "--box", "game", "--save", str(out),
+        ])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
 
     def test_no_player_and_no_standings_is_a_usage_error(self, monkeypatch) -> None:
         monkeypatch.setattr("sys.argv", ["mlb-stats"])

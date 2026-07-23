@@ -191,6 +191,14 @@ class TestPitchVelocityByGame:
         with pytest.raises(ValueError, match="No Splitter pitches found for Test Pitcher"):
             pitch_velocity_by_game(df, "Splitter", "Test Pitcher")
 
+    def test_carries_quartiles_for_the_box_view(self, df) -> None:
+        by_game = pitch_velocity_by_game(df, "Four-Seam Fastball", "Test Pitcher")
+        assert {"q1", "median", "q3"} <= set(by_game.columns)
+        # Game 1: two fastballs 97/95 -> median 96, between min 95 and max 97.
+        first = by_game.iloc[0]
+        assert first["median"] == 96.0
+        assert first["min"] <= first["q1"] <= first["median"] <= first["q3"] <= first["max"]
+
 
 class TestFormatPitchComparisonTable:
     def test_per_game_rows_with_avg(self, velo_game_splits, game_pitches_by_pk) -> None:
@@ -217,6 +225,13 @@ class TestPlotPitchVelocityComparison:
         out = tmp_path / f"{layout}.png"
         plot_pitch_velocity_comparison(two_pitchers, "A", two_pitchers, "B", 2026,
                                        "Four-Seam Fastball", layout=layout, save_path=str(out))
+        assert out.exists() and out.stat().st_size > 0
+
+    @pytest.mark.parametrize("layout", ["stacked", "side-by-side", "overlay"])
+    def test_renders_box_variant_each_layout(self, two_pitchers, tmp_path, layout) -> None:
+        out = tmp_path / f"{layout}_box.png"
+        plot_pitch_velocity_comparison(two_pitchers, "A", two_pitchers, "B", 2026,
+                                       "Four-Seam Fastball", layout=layout, box=True, save_path=str(out))
         assert out.exists() and out.stat().st_size > 0
 
     def test_unknown_layout_raises(self, two_pitchers) -> None:

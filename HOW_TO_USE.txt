@@ -244,8 +244,8 @@ or the full "Four-Seam Fastball" all select the same pitches:
 
      mlb-stats "Paul Skenes" --velo --pitch-type slider
 
---box overlays box-and-whisker plots on the (dimmed) dots, single
-pitcher only. "game" draws one box per game across all its pitches;
+--box adds box-and-whisker plots to the single-pitcher view, over the
+(dimmed) dots. "game" draws one box per game across all its pitches;
 "type" draws one box per pitch type within each game, offset side by
 side and color-matched to the dots. Whiskers cap at 1.5x IQR and the
 game-max line still marks each game's true peak. Note that a "game"
@@ -255,6 +255,11 @@ median between the two clusters -- "type" keeps each box to one pitch:
      mlb-stats "Paul Skenes" --velo --box game
      mlb-stats "Paul Skenes" --velo --box type --start-date 2026-06-01 --end-date 2026-06-30
 
+--box also works in comparison mode (see below), where "game" replaces
+each pitcher's min-max band with a box-and-whisker per game (of the
+compared pitch type); "type" doesn't apply there since a comparison is
+already one pitch type.
+
 Comparing two pitchers: give a second pitcher and the chart switches to
 a velocity-over-time comparison -- each pitcher's per-game AVERAGE
 velocity for one pitch type (default "Four-Seam Fastball"; change it
@@ -263,7 +268,12 @@ real date axis so the season trend reads clearly:
 
      mlb-stats "Paul Skenes" "Tarik Skubal" --velo
      mlb-stats "Paul Skenes" "Tarik Skubal" --velo --pitch-type sinker
+     mlb-stats "Paul Skenes" "Tarik Skubal" --velo --box game
      mlb-stats "Paul Skenes" "Tarik Skubal" --velo --layout side-by-side --table
+
+With --box game the band becomes a box-and-whisker per game (quartiles,
+whiskers to the full min-max) and the connecting line follows the
+median rather than the mean, so it stays centred on each box.
 
 --layout arranges the two pitchers: "stacked" (default -- one panel
 each, stacked, sharing the date axis so timelines line up), "side-by-

@@ -185,7 +185,8 @@ class TestPitchVelocitiesCompareEndpoint:
         # Per-game fastball aggregates: game 1 = mean of 97/95 = 96.0.
         game1 = payload["player1"]["games"][0]
         assert game1["mean"] == pytest.approx(96.0)
-        assert set(game1) == {"date", "opponent", "count", "mean", "min", "max"}
+        # min/mean/max plus the quartiles the box-and-whisker view needs.
+        assert set(game1) == {"date", "opponent", "count", "mean", "min", "q1", "median", "q3", "max"}
 
     def test_pitch_type_defaults_to_four_seam(self, fake_velo_api) -> None:
         resp = client.get("/api/pitch-velocities-compare", params={"player1": "A", "player2": "B"})
