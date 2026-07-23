@@ -100,7 +100,24 @@
           <div class="section-label">Comparison options</div>
           <div class="field">
             <label for="veloPitchType">Pitch type <span class="hint">(comparison line)</span></label>
-            <input id="veloPitchType" type="text" placeholder="Four-Seam Fastball" value="Four-Seam Fastball">
+            <input id="veloPitchType" type="text" placeholder="Four-Seam Fastball" value="Four-Seam Fastball"
+                   list="pitchType-suggestions" autocomplete="off">
+            <datalist id="pitchType-suggestions">
+              <option value="Four-Seam Fastball"></option>
+              <option value="Sinker"></option>
+              <option value="Cutter"></option>
+              <option value="Slider"></option>
+              <option value="Sweeper"></option>
+              <option value="Slurve"></option>
+              <option value="Curveball"></option>
+              <option value="Knuckle Curve"></option>
+              <option value="Changeup"></option>
+              <option value="Splitter"></option>
+              <option value="Forkball"></option>
+              <option value="Screwball"></option>
+              <option value="Knuckleball"></option>
+              <option value="Eephus"></option>
+            </datalist>
           </div>
           <div class="field">
             <label for="veloLayout">Layout</label>
