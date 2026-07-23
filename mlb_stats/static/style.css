@@ -186,6 +186,15 @@ button:hover {
   color: var(--text-faint);
 }
 
+#disclaimer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+#disclaimer a:hover {
+  text-decoration: underline;
+}
+
 /* ---------- Main area ---------- */
 
 main {
