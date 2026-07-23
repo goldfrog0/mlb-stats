@@ -244,6 +244,17 @@ or the full "Four-Seam Fastball" all select the same pitches:
 
      mlb-stats "Paul Skenes" --velo --pitch-type slider
 
+--box overlays box-and-whisker plots on the (dimmed) dots, single
+pitcher only. "game" draws one box per game across all its pitches;
+"type" draws one box per pitch type within each game, offset side by
+side and color-matched to the dots. Whiskers cap at 1.5x IQR and the
+game-max line still marks each game's true peak. Note that a "game"
+box mixes fastballs and offspeed, so it spans a wide range with the
+median between the two clusters -- "type" keeps each box to one pitch:
+
+     mlb-stats "Paul Skenes" --velo --box game
+     mlb-stats "Paul Skenes" --velo --box type --start-date 2026-06-01 --end-date 2026-06-30
+
 Comparing two pitchers: give a second pitcher and the chart switches to
 a velocity-over-time comparison -- each pitcher's per-game AVERAGE
 velocity for one pitch type (default "Four-Seam Fastball"; change it

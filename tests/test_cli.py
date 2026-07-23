@@ -232,6 +232,30 @@ class TestMain:
             cli.main()
         assert excinfo.value.code == 2
 
+    @pytest.mark.parametrize("box", ["game", "type"])
+    def test_velo_box_saves_chart(
+        self, monkeypatch, tmp_path, velo_game_splits, game_pitches_by_pk, box,
+    ) -> None:
+        monkeypatch.setattr(cli, "find_player", lambda name: (694973, "Test Pitcher"))
+        monkeypatch.setattr(cli, "get_game_log", lambda pid, season, group: velo_game_splits)
+        monkeypatch.setattr(cli, "get_game_pitches", lambda pk: game_pitches_by_pk[pk])
+        out = tmp_path / f"box_{box}.png"
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Test Pitcher", "--velo", "--box", box, "--save", str(out)])
+        cli.main()
+        assert out.exists() and out.stat().st_size > 0
+
+    def test_box_without_velo_is_a_usage_error(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "Someone", "--box", "game"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 2
+
+    def test_box_with_comparison_is_a_usage_error(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.argv", ["mlb-stats", "One", "Two", "--velo", "--box", "game"])
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main()
+        assert excinfo.value.code == 2
+
     def test_no_player_and_no_standings_is_a_usage_error(self, monkeypatch) -> None:
         monkeypatch.setattr("sys.argv", ["mlb-stats"])
         with pytest.raises(SystemExit) as excinfo:

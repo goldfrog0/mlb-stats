@@ -13,6 +13,7 @@ from mlb_stats.plots import (
     format_pitch_comparison_table,
     format_pitch_table,
     pitch_velocity_by_game,
+    plot_pitch_velocities,
     plot_pitch_velocity_comparison,
 )
 
@@ -222,3 +223,16 @@ class TestPlotPitchVelocityComparison:
         with pytest.raises(ValueError, match="Unknown velo layout 'chefs-special'"):
             plot_pitch_velocity_comparison(two_pitchers, "A", two_pitchers, "B", 2026,
                                            "Four-Seam Fastball", layout="chefs-special")
+
+
+class TestPlotPitchVelocities:
+    @pytest.fixture
+    def df(self, velo_game_splits, game_pitches_by_pk):
+        games = [(s, game_pitches_by_pk[s["game"]["gamePk"]]) for s in velo_game_splits]
+        return build_pitch_dataframe(games, PITCHER_ID)
+
+    @pytest.mark.parametrize("box", [None, "game", "type"])
+    def test_renders_each_box_style(self, df, tmp_path, box) -> None:
+        out = tmp_path / f"velo_{box}.png"
+        plot_pitch_velocities(df, "Test Pitcher", 2026, save_path=str(out), box=box)
+        assert out.exists() and out.stat().st_size > 0
