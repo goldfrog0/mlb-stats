@@ -3,6 +3,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from matplotlib.axes import Axes
 
 from mlb_stats.stats import get_stat_config
@@ -246,6 +247,11 @@ def pitch_velocity_by_game(df: pd.DataFrame, pitch_type: str, pitcher_name: str)
         "count": grouped["velo"].count(),
         "mean": grouped["velo"].mean(),
         "min": grouped["velo"].min(),
+        # Quartiles for the box-and-whisker view; min/max double as the
+        # whisker fences (full extent, no hidden outliers).
+        "q1": grouped["velo"].quantile(0.25),
+        "median": grouped["velo"].median(),
+        "q3": grouped["velo"].quantile(0.75),
         "max": grouped["velo"].max(),
     }).reset_index(drop=True)
 
@@ -337,8 +343,13 @@ def _finish_plot(save_path: str | None) -> None:
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"Saved to {save_path}")
+        # Release the figure -- a one-shot CLI run wouldn't care, but the
+        # test suite renders many in one process and pyplot keeps every
+        # unclosed figure in memory ("More than 20 figures" warning).
+        plt.close()
     else:
         plt.show()
+        plt.close()
 
 
 def plot_stat(
@@ -511,30 +522,81 @@ def plot_stat_comparison(
     _finish_plot(save_path)
 
 
+PITCH_BOX_STYLES = ("game", "type")
+
+
 def plot_pitch_velocities(
     df: pd.DataFrame, player_name: str, season: int, save_path: str | None = None,
+    box: str | None = None,
 ) -> None:
     """Render every pitch as a dot, one column of dots per game (jittered
     horizontally so same-speed pitches don't stack into a single point),
     colored by pitch type, with a dashed line tracing each game's max
-    velocity across the stretch."""
+    velocity across the stretch.
+
+    box overlays box-and-whisker summaries on the (then dimmed) dots:
+    "game" draws one box per game across all its pitches; "type" draws
+    one box per pitch type within each game, offset side by side and
+    color-matched to the dots. Whiskers cap at 1.5*IQR and outliers are
+    hidden, so the game-max line still marks each game's true peak."""
     dates = sorted(df["date"].unique())
     x_by_date = {date: i for i, date in enumerate(dates)}
+    # Fixed colors per pitch type (sorted) so the dots and the "type"
+    # boxes share one palette rather than drifting between draws.
+    types = sorted(df["pitch_type"].unique())
+    palette = plt.get_cmap("tab10")
+    color_by_type = {t: palette(i % 10) for i, t in enumerate(types)}
 
     fig_width = max(11.0, 1.1 * len(dates) + 3)
     plt.figure(figsize=(fig_width, 6))
 
+    # Dots recede to background context when boxes carry the summary.
+    dot_alpha = 0.22 if box else 0.6
+
     # Seeded so repeated runs of the same command produce the same image.
     rng = np.random.default_rng(0)
-    for pitch_type, group in df.groupby("pitch_type"):
+    for pitch_type in types:
+        group = df[df["pitch_type"] == pitch_type]
         x = group["date"].map(x_by_date) + rng.uniform(-0.28, 0.28, len(group))
-        plt.scatter(x, group["velo"], s=14, alpha=0.6, label=pitch_type)
+        plt.scatter(x, group["velo"], s=14, alpha=dot_alpha,
+                    color=color_by_type[pitch_type], label=pitch_type)
+
+    if box == "game":
+        data = [df[df["date"] == d]["velo"].to_numpy() for d in dates]
+        bp = plt.boxplot(data, positions=list(range(len(dates))), widths=0.5,
+                         manage_ticks=False, showfliers=False, patch_artist=True)
+        for patch in bp["boxes"]:
+            patch.set_facecolor("lightgray")
+            patch.set_alpha(0.6)
+        for median in bp["medians"]:
+            median.set_color("crimson")
+    elif box == "type":
+        n = max(len(types), 1)
+        slot = 0.6 / n
+        for j, pitch_type in enumerate(types):
+            offset = (j - (n - 1) / 2) * slot
+            positions, data = [], []
+            for i, d in enumerate(dates):
+                velos = df[(df["date"] == d) & (df["pitch_type"] == pitch_type)]["velo"].to_numpy()
+                if len(velos):
+                    positions.append(i + offset)
+                    data.append(velos)
+            if not data:
+                continue
+            bp = plt.boxplot(data, positions=positions, widths=slot * 0.8,
+                             manage_ticks=False, showfliers=False, patch_artist=True)
+            for patch in bp["boxes"]:
+                patch.set_facecolor(color_by_type[pitch_type])
+                patch.set_alpha(0.5)
+            for median in bp["medians"]:
+                median.set_color("black")
 
     game_max = df.groupby("date")["velo"].max().reindex(dates)
     plt.plot(range(len(dates)), game_max, color="black", linewidth=1,
              linestyle="--", marker="_", markersize=14, label="Game max")
 
     plt.xticks(range(len(dates)), dates, rotation=45)
+    plt.xlim(-0.5, len(dates) - 0.5)
     plt.xlabel("Game date")
     plt.ylabel("Velocity (mph)")
     plt.title(f"{player_name} — Pitch Velocities by Game ({season} Season)")
@@ -548,13 +610,35 @@ def plot_pitch_velocities(
 VELO_COMPARISON_LAYOUTS = ("stacked", "side-by-side", "overlay")
 
 
-def _draw_velo_panel(ax: Axes, by_game: pd.DataFrame, color: str, label: str | None = None) -> None:
-    """One pitcher's per-game velocity: a shaded min-max band with the
-    mean drawn on top as a marked line. Plotted on a real date axis so
-    the trend reads as over-time, not just game-to-game."""
+def _draw_velo_panel(
+    ax: Axes, by_game: pd.DataFrame, color: str, label: str | None = None, box: bool = False,
+) -> None:
+    """One pitcher's per-game velocity on a real date axis so the trend
+    reads as over-time. By default a shaded min-max band; with box, a
+    box-and-whisker per game (quartiles, whiskers to the full min-max)
+    in its place. Either way the mean is drawn on top as a marked line."""
     dates = pd.to_datetime(by_game["date"])
-    ax.fill_between(dates, by_game["min"], by_game["max"], color=color, alpha=0.15)
-    ax.plot(dates, by_game["mean"], color=color, marker="o", markersize=4, linewidth=2, label=label)
+    if box:
+        stats = [
+            {"med": row["median"], "q1": row["q1"], "q3": row["q3"],
+             "whislo": row["min"], "whishi": row["max"], "fliers": []}
+            for _, row in by_game.iterrows()
+        ]
+        bp = ax.bxp(stats, positions=mdates.date2num(dates), widths=2.0,
+                    patch_artist=True, showfliers=False, manage_ticks=False)
+        for patch in bp["boxes"]:
+            patch.set_facecolor(color)
+            patch.set_alpha(0.25)
+        for element in ("whiskers", "caps", "medians"):
+            for line in bp[element]:
+                line.set_color(color)
+        ax.xaxis_date()
+    else:
+        ax.fill_between(dates, by_game["min"], by_game["max"], color=color, alpha=0.15)
+    # Track the median with boxes (it's the box's own centre line, so the
+    # trend line stays centred on each box) and the mean with the band.
+    center = by_game["median"] if box else by_game["mean"]
+    ax.plot(dates, center, color=color, marker="o", markersize=4, linewidth=2, label=label)
 
 
 def plot_pitch_velocity_comparison(
@@ -566,10 +650,12 @@ def plot_pitch_velocity_comparison(
     pitch_type: str,
     layout: str = "stacked",
     save_path: str | None = None,
+    box: bool = False,
 ) -> None:
     """Compare two pitchers' velocity for one pitch type over a season:
     each pitcher's per-game mean (marked line) over a shaded min-max
-    band. Inputs are per-game frames from pitch_velocity_by_game.
+    band, or -- with box -- over a box-and-whisker per game in the
+    band's place. Inputs are per-game frames from pitch_velocity_by_game.
 
     layout: "stacked" (one panel per pitcher, stacked, sharing the date
     axis so timelines line up), "side-by-side" (panels side by side
@@ -585,7 +671,7 @@ def plot_pitch_velocity_comparison(
     if layout == "overlay":
         fig, ax = plt.subplots(figsize=(11, 5.5))
         for by_game, name, color in panels:
-            _draw_velo_panel(ax, by_game, color, label=name)
+            _draw_velo_panel(ax, by_game, color, label=name, box=box)
         ax.set_ylabel("Velocity (mph)")
         ax.set_xlabel("Game date")
         ax.legend()
@@ -594,7 +680,7 @@ def plot_pitch_velocity_comparison(
     elif layout == "side-by-side":
         fig, axes = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
         for ax, (by_game, name, color) in zip(axes, panels):
-            _draw_velo_panel(ax, by_game, color)
+            _draw_velo_panel(ax, by_game, color, box=box)
             ax.set_title(name)
             ax.set_xlabel("Game date")
             ax.tick_params(axis="x", rotation=45)
@@ -603,7 +689,7 @@ def plot_pitch_velocity_comparison(
     else:  # stacked
         fig, axes = plt.subplots(2, 1, figsize=(11, 8), sharex=True, sharey=True)
         for ax, (by_game, name, color) in zip(axes, panels):
-            _draw_velo_panel(ax, by_game, color)
+            _draw_velo_panel(ax, by_game, color, box=box)
             ax.set_title(name)
             ax.set_ylabel("Velocity (mph)")
         axes[-1].set_xlabel("Game date")

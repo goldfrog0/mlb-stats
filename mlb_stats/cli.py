@@ -18,6 +18,7 @@ from mlb_stats.api import (
 from mlb_stats.plots import (
     COMPARISON_LAYOUTS,
     DEFAULT_PITCH_TYPE,
+    PITCH_BOX_STYLES,
     VELO_COMPARISON_LAYOUTS,
     build_pitch_dataframe,
     build_stat_dataframe,
@@ -122,21 +123,27 @@ def _auto_filename_standings(division_name: str, season: int) -> str:
     return f"{_slugify(division_name)}_standings_{season}_{_today_str()}.png"
 
 
-def _auto_filename_velo(player: str, season: int, start_date: str | None, end_date: str | None) -> str:
+def _auto_filename_velo(
+    player: str, season: int, start_date: str | None, end_date: str | None, box: str | None = None,
+) -> str:
     name = f"{_slugify(player)}_velo_{season}"
     if start_date:
         name += f"_from{start_date}"
     if end_date:
         name += f"_to{end_date}"
+    if box:
+        name += f"_box-{box}"
     return f"{name}_{_today_str()}.png"
 
 
 def _auto_filename_velo_compare(
-    player1: str, player2: str, pitch_type: str, season: int, layout: str,
+    player1: str, player2: str, pitch_type: str, season: int, layout: str, box: bool = False,
 ) -> str:
     name = f"{_slugify(player1)}_vs_{_slugify(player2)}_velo_{_slugify(pitch_type)}_{season}"
     if layout != "stacked":
         name += f"_{layout}"
+    if box:
+        name += "_box"
     return f"{name}_{_today_str()}.png"
 
 
@@ -186,6 +193,11 @@ def main() -> None:
                              'as a substring ("fastball", "four-seam", "slider", ...). In velo '
                              f'comparison mode the average line is for this type (default: '
                              f'"{DEFAULT_PITCH_TYPE}")')
+    parser.add_argument("--box", type=str, default=None, choices=PITCH_BOX_STYLES,
+                        help="--velo: add box-and-whisker plots. Single pitcher: 'game' = one box "
+                             "per game (all pitches), 'type' = one box per pitch type per game, "
+                             "both over dimmed dots. Comparison: 'game' draws a box per game (of "
+                             "the compared pitch type) in place of the min-max band")
     parser.add_argument("--start-date", type=str, default=None, metavar="YYYY-MM-DD",
                         help="--velo only: skip games before this date (inclusive)")
     parser.add_argument("--end-date", type=str, default=None, metavar="YYYY-MM-DD",
@@ -219,6 +231,10 @@ def main() -> None:
         parser.error("--start-date/--end-date only apply to --velo")
     if args.pitch_type and not args.velo:
         parser.error("--pitch-type only applies to --velo")
+    if args.box and not args.velo:
+        parser.error("--box only applies to --velo")
+    if args.box == "type" and args.player2:
+        parser.error("--box type is single-pitcher only; a velo comparison is one pitch type -- use --box game")
 
     # Layout defaults differ by mode; a velo comparison has no overlay-vs-
     # rolling-lines concept, so its default is stacked and chefs-special
@@ -257,10 +273,12 @@ def main() -> None:
 
             save_path = args.save
             if save_path == AUTO_SAVE:
-                save_path = _auto_filename_velo_compare(name1, name2, pitch_type, args.season, args.layout)
+                save_path = _auto_filename_velo_compare(
+                    name1, name2, pitch_type, args.season, args.layout, bool(args.box))
 
             plot_pitch_velocity_comparison(by_game1, name1, by_game2, name2, args.season,
-                                            pitch_type, layout=args.layout, save_path=save_path)
+                                            pitch_type, layout=args.layout, save_path=save_path,
+                                            box=bool(args.box))
         elif args.velo:
             df, full_name = _load_pitch_dataframe(args.player, args.season, args.start_date, args.end_date)
             if args.pitch_type:
@@ -273,9 +291,10 @@ def main() -> None:
 
             save_path = args.save
             if save_path == AUTO_SAVE:
-                save_path = _auto_filename_velo(full_name, args.season, args.start_date, args.end_date)
+                save_path = _auto_filename_velo(
+                    full_name, args.season, args.start_date, args.end_date, args.box)
 
-            plot_pitch_velocities(df, full_name, args.season, save_path=save_path)
+            plot_pitch_velocities(df, full_name, args.season, save_path=save_path, box=args.box)
         elif args.player2:
             df1, name1 = _load_stat_dataframe(args.player, args.season, args.stat, args.window)
             df2, name2 = _load_stat_dataframe(args.player2, args.season, args.stat, args.window)

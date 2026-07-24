@@ -1,5 +1,9 @@
 # Development-only tooling (runtime deps live in requirements.txt)
+# Linters are version-pinned: their rules change between releases, so an
+# unpinned ruff/mypy makes CI fail on code that was clean when written
+# (ruff 0.16 changed import sorting, which broke CI mid-PR). Bump these
+# deliberately, not by surprise.
 pytest
 httpx        # required by fastapi.testclient
-mypy
-ruff
+mypy==2.3.0
+ruff==0.15.21

@@ -13,6 +13,7 @@ from mlb_stats.plots import (
     format_pitch_comparison_table,
     format_pitch_table,
     pitch_velocity_by_game,
+    plot_pitch_velocities,
     plot_pitch_velocity_comparison,
 )
 
@@ -190,6 +191,14 @@ class TestPitchVelocityByGame:
         with pytest.raises(ValueError, match="No Splitter pitches found for Test Pitcher"):
             pitch_velocity_by_game(df, "Splitter", "Test Pitcher")
 
+    def test_carries_quartiles_for_the_box_view(self, df) -> None:
+        by_game = pitch_velocity_by_game(df, "Four-Seam Fastball", "Test Pitcher")
+        assert {"q1", "median", "q3"} <= set(by_game.columns)
+        # Game 1: two fastballs 97/95 -> median 96, between min 95 and max 97.
+        first = by_game.iloc[0]
+        assert first["median"] == 96.0
+        assert first["min"] <= first["q1"] <= first["median"] <= first["q3"] <= first["max"]
+
 
 class TestFormatPitchComparisonTable:
     def test_per_game_rows_with_avg(self, velo_game_splits, game_pitches_by_pk) -> None:
@@ -218,7 +227,27 @@ class TestPlotPitchVelocityComparison:
                                        "Four-Seam Fastball", layout=layout, save_path=str(out))
         assert out.exists() and out.stat().st_size > 0
 
+    @pytest.mark.parametrize("layout", ["stacked", "side-by-side", "overlay"])
+    def test_renders_box_variant_each_layout(self, two_pitchers, tmp_path, layout) -> None:
+        out = tmp_path / f"{layout}_box.png"
+        plot_pitch_velocity_comparison(two_pitchers, "A", two_pitchers, "B", 2026,
+                                       "Four-Seam Fastball", layout=layout, box=True, save_path=str(out))
+        assert out.exists() and out.stat().st_size > 0
+
     def test_unknown_layout_raises(self, two_pitchers) -> None:
         with pytest.raises(ValueError, match="Unknown velo layout 'chefs-special'"):
             plot_pitch_velocity_comparison(two_pitchers, "A", two_pitchers, "B", 2026,
                                            "Four-Seam Fastball", layout="chefs-special")
+
+
+class TestPlotPitchVelocities:
+    @pytest.fixture
+    def df(self, velo_game_splits, game_pitches_by_pk):
+        games = [(s, game_pitches_by_pk[s["game"]["gamePk"]]) for s in velo_game_splits]
+        return build_pitch_dataframe(games, PITCHER_ID)
+
+    @pytest.mark.parametrize("box", [None, "game", "type"])
+    def test_renders_each_box_style(self, df, tmp_path, box) -> None:
+        out = tmp_path / f"velo_{box}.png"
+        plot_pitch_velocities(df, "Test Pitcher", 2026, save_path=str(out), box=box)
+        assert out.exists() and out.stat().st_size > 0
